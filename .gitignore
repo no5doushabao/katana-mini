@@ -1,0 +1,21 @@
+# ── Godot 4 ──
+# 导入缓存：可以随时重新生成，且体积最大（本项目约 2.4 MB / 54 文件）
+.godot/
+
+# 导出产物（导出模板、签名密钥等都不该进仓库）
+/build/
+export_presets.cfg
+*.translation
+
+# ── 编辑器 / 系统 ──
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 临时文件 ──
+*.tmp
+*.bak

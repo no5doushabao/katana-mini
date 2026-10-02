@@ -1,0 +1,177 @@
+[gd_scene format=3 uid="uid://fcwg1scc3vtu"]
+
+[ext_resource type="Script" path="res://scripts/Main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/Player.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/Enemy.gd" id="3_enemy"]
+[ext_resource type="Script" path="res://scripts/PatrolEnemy.gd" id="4_patrol_enemy"]
+[ext_resource type="Texture2D" path="res://art/player_sheet.png" id="5_player_sheet"]
+[ext_resource type="Texture2D" path="res://art/enemy_sheet.png" id="6_enemy_sheet"]
+[ext_resource type="Texture2D" path="res://art/kenney/terrain_ground.png" id="7_ground_tex"]
+[ext_resource type="Texture2D" path="res://art/kenney/terrain_plat_a.png" id="8_plat_a_tex"]
+[ext_resource type="Texture2D" path="res://art/kenney/terrain_plat_b.png" id="9_plat_b_tex"]
+
+[sub_resource type="RectangleShape2D" id="ShapePlayer"]
+size = Vector2(18, 30)
+
+[sub_resource type="RectangleShape2D" id="ShapeAttack"]
+size = Vector2(52, 34)
+
+[sub_resource type="RectangleShape2D" id="ShapeEnemyBody"]
+size = Vector2(26, 34)
+
+[sub_resource type="RectangleShape2D" id="ShapeEnemyDanger"]
+size = Vector2(30, 38)
+
+[sub_resource type="RectangleShape2D" id="ShapeGround"]
+size = Vector2(960, 40)
+
+[sub_resource type="RectangleShape2D" id="ShapePlatformA"]
+size = Vector2(180, 22)
+
+[sub_resource type="RectangleShape2D" id="ShapePlatformB"]
+size = Vector2(140, 22)
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 960.0
+offset_bottom = 540.0
+color = Color(0.09, 0.11, 0.16, 1)
+z_index = -10
+
+[node name="Solids" type="Node2D" parent="."]
+
+[node name="Ground" type="StaticBody2D" parent="Solids"]
+position = Vector2(480, 500)
+collision_layer = 1
+collision_mask = 0
+
+[node name="Shape" type="CollisionShape2D" parent="Solids/Ground"]
+shape = SubResource("ShapeGround")
+
+[node name="Visual" type="Sprite2D" parent="Solids/Ground"]
+texture = ExtResource("7_ground_tex")
+
+[node name="PlatformA" type="StaticBody2D" parent="Solids"]
+position = Vector2(400, 440)
+collision_layer = 1
+collision_mask = 0
+
+[node name="Shape" type="CollisionShape2D" parent="Solids/PlatformA"]
+shape = SubResource("ShapePlatformA")
+
+[node name="Visual" type="Sprite2D" parent="Solids/PlatformA"]
+texture = ExtResource("8_plat_a_tex")
+
+[node name="PlatformB" type="StaticBody2D" parent="Solids"]
+position = Vector2(640, 395)
+collision_layer = 1
+collision_mask = 0
+
+[node name="Shape" type="CollisionShape2D" parent="Solids/PlatformB"]
+shape = SubResource("ShapePlatformB")
+
+[node name="Visual" type="Sprite2D" parent="Solids/PlatformB"]
+texture = ExtResource("9_plat_b_tex")
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="Enemy1" type="Node2D" parent="Enemies"]
+position = Vector2(760, 463)
+script = ExtResource("3_enemy")
+
+[node name="Body" type="StaticBody2D" parent="Enemies/Enemy1"]
+collision_layer = 4
+collision_mask = 0
+
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy1/Body"]
+shape = SubResource("ShapeEnemyBody")
+
+[node name="Visual" type="Sprite2D" parent="Enemies/Enemy1/Body"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("6_enemy_sheet")
+region_enabled = true
+region_rect = Rect2(0, 0, 24, 24)
+
+[node name="Danger" type="Area2D" parent="Enemies/Enemy1"]
+collision_layer = 0
+collision_mask = 2
+
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy1/Danger"]
+shape = SubResource("ShapeEnemyDanger")
+
+[node name="Enemy2" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(400, 412)
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("4_patrol_enemy")
+patrol_left = -55.0
+patrol_right = 55.0
+can_chase = true
+sight_distance = 220.0
+
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy2"]
+shape = SubResource("ShapeEnemyBody")
+
+[node name="Visual" type="Sprite2D" parent="Enemies/Enemy2"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("6_enemy_sheet")
+region_enabled = true
+region_rect = Rect2(0, 0, 24, 24)
+
+[node name="LedgeProbe" type="RayCast2D" parent="Enemies/Enemy2"]
+
+[node name="Sight" type="RayCast2D" parent="Enemies/Enemy2"]
+
+[node name="Danger" type="Area2D" parent="Enemies/Enemy2"]
+collision_layer = 0
+collision_mask = 2
+
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy2/Danger"]
+shape = SubResource("ShapeEnemyDanger")
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(120, 400)
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("2_player")
+
+[node name="Shape" type="CollisionShape2D" parent="Player"]
+shape = SubResource("ShapePlayer")
+
+[node name="Visual" type="Sprite2D" parent="Player"]
+scale = Vector2(1.5, 1.5)
+texture = ExtResource("5_player_sheet")
+region_enabled = true
+region_rect = Rect2(0, 0, 24, 24)
+
+[node name="AttackArea" type="Area2D" parent="Player"]
+position = Vector2(33, 0)
+monitoring = false
+collision_layer = 0
+collision_mask = 4
+
+[node name="Shape" type="CollisionShape2D" parent="Player/AttackArea"]
+shape = SubResource("ShapeAttack")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Info" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 700.0
+offset_bottom = 70.0
+theme_override_font_sizes/font_size = 18
+text = "准备开始"
+
+[node name="SlowBar" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 68.0
+offset_right = 700.0
+offset_bottom = 96.0
+theme_override_font_sizes/font_size = 16
+text = "子弹时间"
+
+[node name="Camera2D" type="Camera2D" parent="Player"]
+zoom = Vector2(1, 1)

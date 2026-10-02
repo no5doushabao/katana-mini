@@ -1,0 +1,19 @@
+# 统一换行符：仓库里一律存 LF，避免 Windows/Linux 之间来回转换产生噪音 diff
+* text=auto eol=lf
+
+# 二进制文件（禁止任何换行符转换）
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.svg  binary
+*.ttf  binary
+*.otf  binary
+*.ogg  binary
+*.wav  binary
+*.mp3  binary
+
+# Godot 场景/资源文件虽然是文本，但让 git 按文本处理即可（默认已覆盖）
+*.tscn text
+*.tres text
+*.gd   text
