@@ -381,7 +381,10 @@ func _sync_visual() -> void:
 # ────────────────────────────── 一击必杀 ──────────────────────────────
 
 ## 被玩家的攻击框罩住时调用（Player.gd 会向上找 "enemy" 组的祖先，所以这里就是根节点）
-func kill() -> void:
+##
+## `_element` 预留但**故意忽略**：巡逻兵属于"杂兵"，保持一击必杀（同 Enemy.gd）。
+## 默认值用于兼容无参调用。
+func kill(_element: String = "") -> void:
 	if _dead:
 		return
 	_dead = true

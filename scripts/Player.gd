@@ -74,6 +74,40 @@ var _attack_left := 0.0           ## 攻击判定框剩余存在时间
 var _is_dead := false
 var _slow_energy := SLOW_ENERGY_MAX  ## 子弹时间能量（满值开始）
 
+# ── 元素附魔（第一版只有火）──
+# 用户 2026-10-06 拍板：先做一种元素（火）。
+# ⚠️ 元素的表现挂在**攻击范围**上，不是角色本体 ——
+#    用户的原话是"攻击的时候，攻击范围变红，用一个小月牙的形状来模拟攻击范围"。
+#    月牙 = 斩击弧光，它天然在表达"这一刀扫过了哪片区域"，比给角色染色信息量大得多。
+# 之所以用变量存当前元素、而不是写死一条分支：后续要扩成"每关自选 3 种元素"，
+# 那时"选元素"就是换这个值 + 决定能循环切换到哪几种，攻击链路完全不用改。
+const ELEMENT_FIRE := "fire"
+
+## 元素 → 月牙颜色。将来加冰/水/雷就往这张表里加，_draw() 不用改。
+const ELEMENT_COLORS := {
+	ELEMENT_FIRE: Color(1.0, 0.38, 0.18, 0.80),
+}
+const ARC_DEFAULT_COLOR := Color(1, 1, 1, 0.70)    ## 没登记的元素：白色兜底
+const ARC_IDLE_COLOR := Color(1, 1, 1, 0.05)       ## 非攻击时：几乎看不见的残影，方便对齐调试
+
+## 月牙几何。
+##
+## 这组数是拿对比图试出来的，三个约束互相拉扯，调的时候都要照顾到：
+##   1. 内半径要 > 角色视觉半宽（24px 精灵 x scale 1.5 = 半宽 18），否则糊在角色脸上
+##   2. 外半径要 ≈ 或略大于判定框外缘（ATTACK_OFFSET_X 33 + 52/2 = 59），
+##      否则玩家会觉得"明明够得到却没打中"
+##   3. 内外半径之差决定弧的"厚度"——太厚像竖着的叶子（第一版 32 就是这样），
+##      太薄又不像能被"扫到"的范围
+## 所以最终取"细弧 + 覆盖判定框外缘"：厚 22，外缘压在 59 上。
+const ARC_OUTER_R := 62.0
+const ARC_INNER_R := 40.0
+const ARC_SPAN_DEG := 84.0        ## 月牙张角（总角度）
+const ARC_SEGMENTS := 16          ## 弧线细分数：够平滑，顶点又不多
+const ARC_TIP_SHARP := 1.4        ## 两头收尖的陡峭度（1.0=线性收，越大越尖）
+
+var element := ELEMENT_FIRE          ## 当前附魔元素（第一版固定火）
+var _arc_active := false             ## 上一帧月牙是否激活（用来决定要不要重绘）
+
 @onready var shape: CollisionShape2D = $Shape
 @onready var attack_area: Area2D = $AttackArea
 @onready var camera: Camera2D = get_node_or_null("Camera2D") as Camera2D
@@ -92,6 +126,10 @@ func _physics_process(delta: float) -> void:
 	# 精灵切帧放最前面：即使死了也要把帧摆对（死亡状态显示下落帧）
 	_update_sprite(delta)
 	if _is_dead:
+		# 死了就把月牙收掉，否则会挂着一道僵在半空的弧光
+		if _arc_active:
+			_arc_active = false
+			queue_redraw()
 		return
 
 	_tick_timers(delta)
@@ -100,6 +138,15 @@ func _physics_process(delta: float) -> void:
 	_handle_dash(delta)
 	_handle_jump(delta)
 	_handle_attack(delta)
+
+	# ⚠️ 月牙的重绘放在 _handle_attack() **之后**：
+	#    _attack_left 是本帧末尾才置位的，而 _draw() 自己不会每帧重画。
+	#    只在"激活状态真的变了"时 queue_redraw()，避免每帧重建多边形。
+	#    （第一版把染色写进 _update_sprite()，测试实测抓到它**晚一帧**才生效。）
+	var arc_now := _attack_left > 0.0
+	if arc_now != _arc_active:
+		_arc_active = arc_now
+		queue_redraw()
 
 	# 重力和下落上限
 	if not is_on_floor():
@@ -142,7 +189,9 @@ func _tick_timers(delta: float) -> void:
 func _on_attack_hit(body: Node2D) -> void:
 	var root := _find_group_ancestor(body, "enemy")
 	if root and root.has_method("kill"):
-		root.kill()
+		# 带上当前附魔元素：杂兵忽略它（保持一击必杀），精英和将来的元素反应会用它。
+		# 所有 kill() 实现都带默认值，所以这条调用对旧实现也安全。
+		root.kill(element)
 
 
 ## 沿父节点链向上找第一个属于指定组的节点（含自身）
@@ -242,6 +291,16 @@ func _handle_attack(_delta: float) -> void:
 		_attack_left = ATTACK_ACTIVE
 
 
+## 当前攻击月牙该用什么颜色。
+##
+## 抽成函数是为了让 _draw() 和测试用**同一个来源** —— 否则测试断言的是一套、
+## 实际画出来的是另一套，"测过了"并不代表"看得对"。
+func get_arc_color() -> Color:
+	if _attack_left <= 0.0:
+		return ARC_IDLE_COLOR
+	return ELEMENT_COLORS.get(element, ARC_DEFAULT_COLOR)
+
+
 ## 被任何危险物（敌人、陷阱）碰到时由它们调用
 func die() -> void:
 	if _is_dead:
@@ -309,16 +368,43 @@ func _update_sprite(delta: float) -> void:
 	sprite.flip_h = facing > 0
 
 
-## 把攻击判定框画出来，方便调试时看见它到底在哪
+## 攻击范围的可视化：一道小月牙（斩击弧光）
 ##
-## ⚠️ 这个绘制曾经有个 bug：朝右时从 y=0 起画、朝左时从 y=-17 起画，
-##    于是框在两种朝向下垂直位置差 34px（朝右看着"偏下/矮一截"）。
-##    而**真实碰撞判定一直是居中的**（AttackArea 在 position=(±33, 0)、
-##    形状 52x34）——所以那个 bug 只骗眼睛，不影响手感。
-##    教训：调试可视化必须和真实判定用同一套坐标，否则会误导判断。
+## 用户 2026-10-06 的要求：攻击时"攻击范围变红"，并明确说用**小月牙的形状**来表现范围。
+## 所以这里画的是弧，不是调试用的矩形框 —— 矩形只说明边界在哪，
+## 而月牙本身就是"刀扫过去"的样子，它天然在表达"这一刀覆盖了哪片区域"。
+##
+## 历史教训（留着，别重犯）：这个绘制曾经朝右时从 y=0 起画、朝左时从 y=-17 起画，
+## 于是框在两种朝向下位置差 34px（朝右看着"偏下/矮一截"）。
+## 而**真实碰撞判定一直是对的**（AttackArea 在 position=(±33, 0)、形状 52x34）——
+## 那个 bug 只骗眼睛。教训：可视化必须和真实判定共用同一个中心点。
+## 月牙同样以玩家原点为中心、只按朝向水平翻转，两种朝向天然对称。
 func _draw() -> void:
-	# 矩形始终以玩家原点为中心，只按朝向水平翻转
-	var x0 := 0.0 if facing > 0 else -ATTACK_RANGE.x
-	var r := Rect2(Vector2(x0, -ATTACK_RANGE.y * 0.5), ATTACK_RANGE)
-	var col := Color(1.0, 0.85, 0.2, 0.35) if _attack_left > 0.0 else Color(1, 1, 1, 0.06)
-	draw_rect(r, col, true)
+	draw_colored_polygon(_build_arc_polygon(), get_arc_color())
+
+
+## 构造月牙多边形：外弧 + 内弧围成的封闭区域
+##
+## 两条弧共用**同一个圆心**（玩家原点），但内弧的两端把半径收向外半径，
+## 于是两头自然收成尖角 —— 这才是"月牙"而不是"扇环"的关键。
+func _build_arc_polygon() -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var half := deg_to_rad(ARC_SPAN_DEG) * 0.5
+	# 朝右从 0 起算、朝左从 π 起算（Godot 里 y 轴向下，角度顺时针增长）
+	var base := 0.0 if facing > 0 else PI
+
+	# 外弧：-half -> +half
+	for i in range(ARC_SEGMENTS + 1):
+		var t := float(i) / float(ARC_SEGMENTS)
+		var ang := base + lerpf(-half, half, t)
+		pts.append(Vector2(cos(ang), sin(ang)) * ARC_OUTER_R)
+
+	# 内弧：反向走回来（+half -> -half），半径在两端收向外半径，收出尖角
+	for i in range(ARC_SEGMENTS + 1):
+		var t := float(i) / float(ARC_SEGMENTS)
+		var ang := base + lerpf(half, -half, t)
+		var edge := absf(t - 0.5) * 2.0        # 中间 0、两端 1
+		var r := lerpf(ARC_INNER_R, ARC_OUTER_R, pow(edge, ARC_TIP_SHARP))
+		pts.append(Vector2(cos(ang), sin(ang)) * r)
+
+	return pts

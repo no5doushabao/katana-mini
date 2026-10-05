@@ -24,6 +24,7 @@ const HAZARD := preload("res://scripts/Hazard.gd")
 const CHECKPOINT := preload("res://scripts/Checkpoint.gd")
 const ENEMY := preload("res://scripts/Enemy.gd")
 const PATROL := preload("res://scripts/PatrolEnemy.gd")
+const ELITE := preload("res://scripts/EliteEnemy.gd")
 
 const TEX_GROUND := "res://art/kenney/strip_ground.png"
 const TEX_PLATFORM := "res://art/kenney/strip_platform.png"
@@ -53,6 +54,12 @@ const CHECKPOINTS := [140.0, 1000.0, 1960.0]
 const STATIC_ENEMIES := [
 	[700.0, 463.0],      # 屏1：平坦地面，冲过去砍
 	[1700.0, 463.0],     # 屏2：对岸
+]
+# 精英敌人：[x, y] —— 要砍 4 刀（scripts/EliteEnemy.gd），用来体现"元素"的价值
+# 放在屏1 出生点右侧不远处：玩家一开局就能撞见，不用先跑两屏才试到新东西。
+# ⚠️ 别和 STATIC_ENEMIES 的位置重叠：两个敌人叠在一起会互相遮挡，也不好判断谁在挨打。
+const ELITES := [
+	[450.0, 463.0],      # 屏1：出生点（x=120）与第一个靶子（x=700）之间
 ]
 # 巡逻敌人：[x, y, 左边界, 右边界]
 const PATROLS := [
@@ -229,6 +236,63 @@ func _build() -> void:
 		dr.size = Vector2(30, 38)
 		ds.shape = dr
 		dg.add_child(ds)
+
+	# 精英敌人：结构和静止靶子一样，只是更大、更显眼、而且有血
+	#
+	# ⚠️ 这里刻意用"先把整棵子树搭好，最后才 add_child 进树"的顺序
+	#    （和上面静止靶子的写法不同）。原因：EliteEnemy._ready() 会读
+	#    visual.scale 存基准缩放，若 _ready() 早于子节点挂载，visual 是 null、
+	#    基准缩放退化，受击动画就会错乱。tests/test_core.gd 顶部也记着这条经验。
+	for i in range(ELITES.size()):
+		var el: Array = ELITES[i]
+		var elite := Node2D.new()
+		elite.name = "Elite%d" % i
+		elite.position = Vector2(el[0], el[1])
+		elite.set_script(ELITE)
+
+		var ebody := StaticBody2D.new()
+		ebody.name = "Body"
+		ebody.collision_layer = 4
+		ebody.collision_mask = 0
+		var ebs := CollisionShape2D.new()
+		ebs.name = "Shape"
+		var ebr := RectangleShape2D.new()
+		ebr.size = Vector2(34, 46)          # 比杂兵（26x34）大一圈，一眼能看出是精英
+		ebs.shape = ebr
+		ebody.add_child(ebs)
+
+		var evis := Sprite2D.new()
+		evis.name = "Visual"
+		evis.texture = load(TEX_ENEMY_SHEET)
+		evis.region_enabled = true
+		evis.region_rect = Rect2(0, 0, 24, 24)
+		evis.scale = Vector2(2.0, 2.0)      # 杂兵是 1.5
+		ebody.add_child(evis)
+		elite.add_child(ebody)
+
+		# 元素附着图标（头顶）。默认隐藏，附着时由 EliteEnemy 显示并闪烁。
+		# ⚠️ 挂在 elite（根节点）而不是 ebody 上：Body/Visual 受击时会缩放，
+		#    图标挂在根上就不会跟着一起抖。
+		# ⚠️ 贴图先不设，由 EliteEnemy 按附着元素加载 —— 这里只造节点。
+		var eicon := Sprite2D.new()
+		eicon.name = "AuraIcon"
+		eicon.position = Vector2(0, -36)     # 头顶：主体高 46，再留 13px 间隙
+		eicon.visible = false
+		elite.add_child(eicon)
+
+		var edg := Area2D.new()
+		edg.name = "Danger"
+		edg.collision_layer = 0
+		edg.collision_mask = 2
+		var eds := CollisionShape2D.new()
+		eds.name = "Shape"
+		var edr := RectangleShape2D.new()
+		edr.size = Vector2(38, 50)
+		eds.shape = edr
+		edg.add_child(eds)
+		elite.add_child(edg)
+
+		enemies.add_child(elite)            # 子树齐了才进树
 
 	# 巡逻兵（PatrolEnemy 会自己补全缺失的探测节点）
 	for i in range(PATROLS.size()):

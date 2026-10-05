@@ -65,7 +65,13 @@ func reset_enemy(revive_dead: bool = true) -> void:
 
 
 ## 被玩家攻击判定框覆盖时调用
-func kill() -> void:
+##
+## `_element` 是为「元素系统」预留的：玩家攻击时会带上当前附魔元素
+## （见 Player.gd 的 _on_attack_hit）。普通杂兵**故意忽略**它 ——
+## 一击必杀是武士刀零的爽感来源，不该被元素改变（用户拍板的"分层"方案：
+## 杂兵一击必杀 / 精英有血 + 元素弱点）。
+## 默认值是为了兼容无参调用（测试与生成器都这么调）。
+func kill(_element: String = "") -> void:
 	if _dead:
 		return
 	_dead = true
