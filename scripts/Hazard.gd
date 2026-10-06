@@ -13,6 +13,11 @@ extends Area2D
 ##
 ## 用法：把它放在场景里，配好 patrol 距离即可。碰到玩家 -> 玩家死。
 
+# 视觉贴图（由 tools/gen_hazard_sprite.py 生成）。
+# ⚠️ 必须用**磁盘路径 load**，不要用代码动态创建的纹理 —— 动态纹理没有磁盘路径，
+#    PackedScene 只能把整张图嵌进场景文件（§8.1 的老坑：main.tscn 会从 5KB 涨到 25MB）。
+const TEX_VISUAL := "res://art/hazard.png"
+
 # ────────────────────────── 可调参数 ──────────────────────────
 @export var speed := 150.0              ## 移动速度（px/s）。140~180 是甜点区
 @export var travel := 220.0             ## 单程移动距离（px）
@@ -42,6 +47,19 @@ func _ready() -> void:
 
 	_shape = get_node_or_null("Shape") as CollisionShape2D
 	_visual = get_node_or_null("Visual") as Sprite2D
+
+	# ⚠️ 兜底：**宁可给个默认视觉，也不要"隐形杀手"**（2026-10-07 的教训）。
+	#    用户报的"最后一个高台右边空无一物却会被杀"，根因就是这里 ——
+	#    生成器没造 Visual，而 _ready() 原来只兜底 Shape、没兜底视觉。
+	#    缺视觉的危险物比缺碰撞体的危险物**危险得多**：后者只是没威胁，
+	#    前者是"看不见的随机致死"，正是关卡设计里最忌讳的东西。
+	if _visual == null:
+		_visual = Sprite2D.new()
+		_visual.name = "Visual"
+		var tex := load(TEX_VISUAL) as Texture2D
+		if tex != null:
+			_visual.texture = tex
+		add_child(_visual)
 
 	# ⚠️ 只有"缺形状"时才自动补，否则会多出一个重复的 CollisionShape2D
 	#    （场景里已经配了 Shape，这里再建一个就会有两个碰撞体叠着）

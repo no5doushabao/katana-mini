@@ -167,6 +167,37 @@ func _run() -> void:
 		_check(absf(y_r - aa.position.y) < 0.001 or absf(y_r) < 0.001,
 			"⑤d 朝右/朝左时攻击框高度一致（y 差 %.2f）" % absf(y_r - aa.position.y))
 
+	# ── 掉出世界底部 = 死（用户 2026-10-07）──
+	#
+	# 没有这条判定的话，掉进沟里会**永远坠落**：死不了、也回不来，只能自己按 R ——
+	# 那不是"不够合理"，是**卡死状态**；而且它会让屏 2 那条 110px 深沟
+	# （"冲刺要收得住"的教学）变成纯装饰。
+	# ⚠️ 阈值从 Main.gd 的常量读，不写死数字（以后调地图高度不该让测试假失败）。
+	var levels := get_nodes_in_group("level")
+	if levels.is_empty():
+		_fails.append("★ 找不到 level 组节点（Main.gd 没注册？）")
+	else:
+		var lc: Dictionary = (levels[0] as Node).get_script().get_script_constant_map()
+		var fall_y: float = float(lc.get("FALL_DEATH_Y", 0.0))
+		_check(fall_y > 0.0, "关卡定义了掉落死亡阈值（FALL_DEATH_Y=%.0f）" % fall_y)
+
+		# 阈值必须**明显低于地面**，否则站在地上就会被判死
+		_check(fall_y > 480.0 + 80.0,
+			"掉落阈值在地面之下留有余量（%.0f > 地面顶 480 + 80）—— 否则正常跳跃会误伤" % fall_y)
+
+		p.respawn(Vector2(120.0, 400.0))
+		await physics_frame
+		_check(not p.get("_is_dead"), "复活后是活的（前置条件）")
+
+		p.global_position = Vector2(p.global_position.x, fall_y + 30.0)
+		for i in range(4):
+			await physics_frame
+		_check(p.get("_is_dead"), "掉到阈值以下会判定死亡（不再无限坠落）")
+
+		# 收尾：把人放回地面，别给后面的断言留脏状态
+		p.respawn(Vector2(120.0, 400.0))
+		await physics_frame
+
 	# ── 汇总（统一走 _finish，避免和"提前 return"路径重复实现）──
 	_finish()
 

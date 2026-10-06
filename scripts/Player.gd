@@ -1,4 +1,8 @@
 extends CharacterBody2D
+
+## 切换附魔元素时发出（HUD / 音效 / 粒子可以接）
+signal element_changed(element: String)
+
 ## 玩家控制器 —— 迷刀 Mini 的核心手感所在
 ##
 ## 设计意图（照抄《武士刀零》的关键手感，不是照抄它的全部）：
@@ -74,21 +78,37 @@ var _attack_left := 0.0           ## 攻击判定框剩余存在时间
 var _is_dead := false
 var _slow_energy := SLOW_ENERGY_MAX  ## 子弹时间能量（满值开始）
 
-# ── 元素附魔（第一版只有火）──
-# 用户 2026-10-06 拍板：先做一种元素（火）。
-# ⚠️ 元素的表现挂在**攻击范围**上，不是角色本体 ——
-#    用户的原话是"攻击的时候，攻击范围变红，用一个小月牙的形状来模拟攻击范围"。
-#    月牙 = 斩击弧光，它天然在表达"这一刀扫过了哪片区域"，比给角色染色信息量大得多。
-# 之所以用变量存当前元素、而不是写死一条分支：后续要扩成"每关自选 3 种元素"，
-# 那时"选元素"就是换这个值 + 决定能循环切换到哪几种，攻击链路完全不用改。
+# ── 元素附魔（第一版：火 / 水）──
+# 用户 2026-10-06 拍板的两件事：
+#   ① 元素的表现挂在**攻击范围**上，不是角色本体
+#      （原话："用小月牙的形状来模拟攻击范围"）
+#   ② 10-06 晚上加"一个按钮循环切换属性"：一开始是火，按一下变水，再按又变回火
+#
+# ⚠️ 切换用**数组 + 索引**，不写死"火 ↔ 水"：
+#    用户的总体设计是"每关自选 3 种元素"，到时候只要换 ELEMENTS 的内容
+#    （或者按关卡数据填），切换逻辑一行都不用改。
 const ELEMENT_FIRE := "fire"
+const ELEMENT_WATER := "water"
 
-## 元素 → 月牙颜色。将来加冰/水/雷就往这张表里加，_draw() 不用改。
+## 可切换的元素 —— 按 L 在这个列表里循环
+const ELEMENTS := [ELEMENT_FIRE, ELEMENT_WATER]
+
+## 元素 → 月牙颜色。加新元素就在这张表里加一行，_draw() 不用改。
 const ELEMENT_COLORS := {
-	ELEMENT_FIRE: Color(1.0, 0.38, 0.18, 0.80),
+	ELEMENT_FIRE: Color(1.0, 0.38, 0.18, 0.80),     # 橙红
+	ELEMENT_WATER: Color(0.32, 0.72, 1.0, 0.80),    # 亮蓝
 }
 const ARC_DEFAULT_COLOR := Color(1, 1, 1, 0.70)    ## 没登记的元素：白色兜底
 const ARC_IDLE_COLOR := Color(1, 1, 1, 0.05)       ## 非攻击时：几乎看不见的残影，方便对齐调试
+const TINT_CLEAR := Color(1, 1, 1, 1)              ## 角色本体的"无色"
+
+## 切换后的冷却。第一版是 0（不冷却）——
+## 元素反应才是这个系统的核心，卡切换只会让手感变涩。需要时再调这个数。
+const ELEMENT_SWITCH_CD := 0.0
+## 切换瞬间角色闪一下**新元素**的颜色。
+## 它和"攻击时月牙变色"是两件事，别混淆：
+##   切换闪光 = "我现在是什么属性"；月牙颜色 = "这一刀是什么属性"。
+const SWITCH_FLASH_TIME := 0.20
 
 ## 月牙几何。
 ##
@@ -105,7 +125,10 @@ const ARC_SPAN_DEG := 84.0        ## 月牙张角（总角度）
 const ARC_SEGMENTS := 16          ## 弧线细分数：够平滑，顶点又不多
 const ARC_TIP_SHARP := 1.4        ## 两头收尖的陡峭度（1.0=线性收，越大越尖）
 
-var element := ELEMENT_FIRE          ## 当前附魔元素（第一版固定火）
+var element_index := 0               ## 当前元素在 ELEMENTS 里的下标
+var element := ELEMENTS[0]           ## 当前附魔元素（开局是火）
+var _switch_cd := 0.0                ## 切换冷却剩余
+var _switch_flash := 0.0             ## 切换闪光剩余（>0 时角色染成新元素色）
 var _arc_active := false             ## 上一帧月牙是否激活（用来决定要不要重绘）
 
 @onready var shape: CollisionShape2D = $Shape
@@ -126,10 +149,13 @@ func _physics_process(delta: float) -> void:
 	# 精灵切帧放最前面：即使死了也要把帧摆对（死亡状态显示下落帧）
 	_update_sprite(delta)
 	if _is_dead:
-		# 死了就把月牙收掉，否则会挂着一道僵在半空的弧光
+		# 死了就把月牙收掉，并把切换闪光清干净
+		# （否则会顶着一身元素色躺在那，而且 _switch_flash 也不再递减了）
 		if _arc_active:
 			_arc_active = false
 			queue_redraw()
+		_switch_flash = 0.0
+		_update_element_visual()
 		return
 
 	_tick_timers(delta)
@@ -138,6 +164,7 @@ func _physics_process(delta: float) -> void:
 	_handle_dash(delta)
 	_handle_jump(delta)
 	_handle_attack(delta)
+	_handle_element_switch(delta)
 
 	# ⚠️ 月牙的重绘放在 _handle_attack() **之后**：
 	#    _attack_left 是本帧末尾才置位的，而 _draw() 自己不会每帧重画。
@@ -147,6 +174,9 @@ func _physics_process(delta: float) -> void:
 	if arc_now != _arc_active:
 		_arc_active = arc_now
 		queue_redraw()
+
+	# 元素视觉（切换闪光）同样放在最后 —— _switch_flash 是本帧刚更新的
+	_update_element_visual()
 
 	# 重力和下落上限
 	if not is_on_floor():
@@ -301,6 +331,49 @@ func get_arc_color() -> Color:
 	return ELEMENT_COLORS.get(element, ARC_DEFAULT_COLOR)
 
 
+## 按 L 循环切换附魔元素（火 → 水 → 火 …）
+##
+## 用户 2026-10-06 晚的设计。用取模在 ELEMENTS 里循环，
+## 所以将来"每关自选 3 种元素"只是换数组内容，这个函数一行都不用改。
+func _handle_element_switch(delta: float) -> void:
+	_switch_cd = maxf(_switch_cd - delta, 0.0)
+	_switch_flash = maxf(_switch_flash - delta, 0.0)
+
+	if not Input.is_action_just_pressed("switch_element") or _switch_cd > 0.0:
+		return
+
+	element_index = (element_index + 1) % ELEMENTS.size()
+	element = ELEMENTS[element_index]
+	_switch_cd = ELEMENT_SWITCH_CD
+	_switch_flash = SWITCH_FLASH_TIME
+	# 若切换正好发生在攻击窗口内，月牙要立刻换成新元素的颜色
+	queue_redraw()
+	element_changed.emit(element)
+
+
+## 元素的"角色侧"视觉：切换瞬间闪一下**新元素**的颜色
+##
+## ⚠️ 注意攻击时角色**不染色** —— 攻击的元素表现挂在**月牙**上。
+##    这两件事别搞混：切换闪光说的是"我现在是什么属性"，
+##    月牙颜色说的是"这一刀是什么属性"。用户明确要求过元素表现在攻击范围上。
+func _update_element_visual() -> void:
+	if sprite == null:
+		return
+	if _switch_flash > 0.0:
+		var c: Color = ELEMENT_COLORS.get(element, ARC_DEFAULT_COLOR)
+		sprite.modulate = Color(c.r, c.g, c.b, 1.0)
+	else:
+		sprite.modulate = TINT_CLEAR
+
+
+## 给 HUD 用：当前元素的显示名
+func get_element_label() -> String:
+	match element:
+		ELEMENT_FIRE: return "火"
+		ELEMENT_WATER: return "水"
+		_: return element
+
+
 ## 被任何危险物（敌人、陷阱）碰到时由它们调用
 func die() -> void:
 	if _is_dead:
@@ -319,6 +392,8 @@ func respawn(at: Vector2) -> void:
 	_dash_left = 0.0
 	_dash_cd = 0.0
 	_attack_left = 0.0
+	# 清掉切换闪光，但**保留当前元素** —— 死一次不该逼玩家重新选属性
+	_switch_flash = 0.0
 
 
 ## 根据当前状态切换精灵帧

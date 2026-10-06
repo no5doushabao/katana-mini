@@ -32,6 +32,7 @@ const TEX_ENEMY_SHEET := "res://art/enemy_sheet.png"
 const TEX_BG_SKY := "res://art/kenney/bg_sky.png"
 const TEX_BG_HILLS := "res://art/kenney/bg_hills.png"
 const TEX_BG_TREES := "res://art/kenney/bg_trees.png"
+const TEX_HAZARD := "res://art/hazard.png"     # 移动危险物的视觉（tools/gen_hazard_sprite.py 生成）
 
 # ─────────────── 地图数据（改这里就是改关卡）───────────────
 # 地面段：[起始x, 结束x] —— 段之间的空隙就是深沟
@@ -61,6 +62,11 @@ const STATIC_ENEMIES := [
 const ELITES := [
 	[450.0, 463.0],      # 屏1：出生点（x=120）与第一个靶子（x=700）之间
 ]
+
+## 精英是否作为**无限血木桩**（用户 2026-10-07：要反复试各种元素反应）。
+## 打开后：血打空立刻回满（不死）、且不伤害玩家。
+## 想恢复成"4 刀的精英"把它改成 false 即可。
+const ELITE_IS_DUMMY := true
 # 巡逻敌人：[x, y, 左边界, 右边界]
 const PATROLS := [
 	[1500.0, 463.0, -110.0, 110.0],   # 屏2：沟后地面巡逻
@@ -110,6 +116,28 @@ func _solid(parent: Node, name: String, cx: float, cy: float, w: float, h: float
 	sp.region_rect = Rect2(0, 0, w, h)
 	sp.centered = true
 	body.add_child(sp)
+
+
+## 造一堵**没有视觉**的墙（世界边界用）。
+##
+## 为什么不复用 `_solid`：`_solid` 会挂一个 Sprite2D，而边界墙必须**隐形** ——
+## 玩家不该看见"世界尽头有一堵墙"，只该感觉到"走不过去"。
+## ⚠️ 而且 `test_terrain` 会遍历 Solids 检查每块地形都有贴图，
+##    墙塞进 Solids 会让那条测试误报（它检查的是"该有贴图的东西有没有贴图"）。
+func _wall(parent: Node, name: String, cx: float, cy: float, w: float, h: float) -> void:
+	var body := StaticBody2D.new()
+	body.name = name
+	body.position = Vector2(cx, cy)
+	body.collision_layer = 1
+	body.collision_mask = 0
+	parent.add_child(body)
+
+	var cs := CollisionShape2D.new()
+	cs.name = "Shape"
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(w, h)
+	cs.shape = rect
+	body.add_child(cs)
 
 
 ## 三层视差背景（解决"画面空旷"）
@@ -180,6 +208,28 @@ func _build() -> void:
 	for i in range(PLATFORMS.size()):
 		var p: Array = PLATFORMS[i]
 		_solid(solids, "Platform%d" % i, p[0], p[1], p[2], 22.0, TEX_PLATFORM)
+
+	# ═══ 2.5 世界左右边界（用户 2026-10-07）═══
+	#
+	# 没有墙的话，玩家能走出地图边缘一路掉下去 —— 那看起来像"悬崖"，
+	# 其实只是"地图没画完"。语义要分清：**边界是墙，沟才是无底洞**。
+	# （"掉出底部就死"由 Main.gd 的 FALL_DEATH_Y 兜底，两者是配套的。）
+	#
+	# ⚠️ 放在独立的 Bounds 节点下，**不要**塞进 Solids：见 _wall 的注释。
+	var bounds := Node2D.new()
+	bounds.name = "Bounds"
+	scene.add_child(bounds)
+
+	var world_left := 0.0
+	var world_right := 0.0
+	for g in GROUNDS:
+		world_left = minf(world_left, g[0])
+		world_right = maxf(world_right, g[1])
+	var wall_t := 40.0        # 墙厚（贴在世界外侧，玩家只会"撞到"它）
+	var wall_h := 1200.0      # 够高：从画面上方一直到深渊以下
+	var wall_cy := 300.0      # 覆盖 y ∈ [-300, 900]
+	_wall(bounds, "WallLeft", world_left - wall_t * 0.5, wall_cy, wall_t, wall_h)
+	_wall(bounds, "WallRight", world_right + wall_t * 0.5, wall_cy, wall_t, wall_h)
 
 	# ═══ 3. 检查点 ═══
 	var cps := Node2D.new()
@@ -274,11 +324,22 @@ func _build() -> void:
 		# ⚠️ 挂在 elite（根节点）而不是 ebody 上：Body/Visual 受击时会缩放，
 		#    图标挂在根上就不会跟着一起抖。
 		# ⚠️ 贴图先不设，由 EliteEnemy 按附着元素加载 —— 这里只造节点。
+		# ⚠️ y 值必须和 EliteEnemy.gd 的 ICON_Y 一致（那边复位时也用它）。
+		#    图标 2026-10-07 从 24x24 升到 32x32，底部到中心从 12 变 16，
+		#    所以从 -36 抬到 -42，否则会压进精英头顶。
 		var eicon := Sprite2D.new()
 		eicon.name = "AuraIcon"
-		eicon.position = Vector2(0, -36)     # 头顶：主体高 46，再留 13px 间隙
+		eicon.position = Vector2(0, -42)     # 头顶：主体顶在 -24，图标底 -26，留 2px 缝
 		eicon.visible = false
 		elite.add_child(eicon)
+
+		# 反应图标：元素反应时它带着"新元素"从另一侧飞入，和 AuraIcon 相撞。
+		# 平时隐藏，只在反应动画那 0.3 秒里出现（用户 10-07 的方案 B）。
+		var ricon := Sprite2D.new()
+		ricon.name = "ReactionIcon"
+		ricon.position = Vector2(0, -42)
+		ricon.visible = false
+		elite.add_child(ricon)
 
 		var edg := Area2D.new()
 		edg.name = "Danger"
@@ -291,6 +352,10 @@ func _build() -> void:
 		eds.shape = edr
 		edg.add_child(eds)
 		elite.add_child(edg)
+
+		# ⚠️ 必须在 add_child() **之前** set：_ready() 在进树时同步执行，
+		#    它会读 is_dummy 来决定要不要关掉危险区。
+		elite.set("is_dummy", ELITE_IS_DUMMY)
 
 		enemies.add_child(elite)            # 子树齐了才进树
 
@@ -316,14 +381,22 @@ func _build() -> void:
 		var h := Area2D.new()
 		h.name = "Hazard%d" % i
 		h.position = Vector2(hz[0], hz[1])
+		# ⭐ 视觉必须**在进树之前**挂好（2026-10-07 修的 bug）。
+		#    Hazard.gd 的 _ready() 会在节点进树时去抓 "Visual" 子节点，
+		#    那一瞬间没有就是**永远没有** → 危险物隐形、碰撞体却还在 =
+		#    用户报的"最后一个高台右边空无一物，却会被杀"。
+		var hvis := Sprite2D.new()
+		hvis.name = "Visual"
+		hvis.texture = load(TEX_HAZARD)
+		h.add_child(hvis)
 		h.set_script(HAZARD)
 		h.set("travel", hz[2])
 		h.set("vertical", hz[3])
 		h.set("start_progress", hz[4])
 		hzs.add_child(h)
 		# ⚠️ 这里**不要**再建 Shape：Hazard.gd 的 _ready() 会自己补全。
-		#    原因：set_script() 会**立即触发 _ready()**，那时子节点还没加，
-		#    Hazard 以为"没配形状"就自建一个；生成器再加一个就会出现两个碰撞体
+		#    原因：_ready() 在节点进树时触发，那时如果没配形状，
+		#    Hazard 以为"没配"就自建一个；生成器再加一个就会出现两个碰撞体
 		#    （第二个会被 Godot 命名成 @CollisionShape2D@2）。
 
 	# ═══ 6. HUD（Main.gd 需要 HUD/Info 和 HUD/SlowBar）═══

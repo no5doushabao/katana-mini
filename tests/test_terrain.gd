@@ -79,6 +79,47 @@ func _run() -> void:
 		elif layers > 0:
 			fails.append("视差层只有 %d 层有贴图（期望 3 层）" % layers)
 
+	# ── "能杀人的东西必须有可见视觉"（2026-10-07 用户报的 bug）──
+	#
+	# 用户原话："全地图最后一个高台的右边，明明空无一物，但是我会被杀。"
+	# 根因：生成器造 Hazard 时只造了 Area2D、**没造 Visual 子节点**，
+	#       而 Hazard.gd 的 _ready() 只兜底 Shape、不兜底视觉 →
+	#       碰撞体在、视觉不在 = **看不见的随机致死**（关卡设计里最忌讳的东西）。
+	# ⚠️ 一般化：**场景里凡是能致死的东西，都必须有可见视觉**。
+	#    断言故意不写死数量（地图是生成的），只要求"每个 hazard 都有视觉"。
+	var hazards := get_nodes_in_group("hazard")
+	if hazards.is_empty():
+		fails.append("★ 场景里一个危险物都没有（hazard 组为空）—— 生成器没建？")
+	else:
+		var hz_ok := 0
+		for h in hazards:
+			var hv := h.get_node_or_null("Visual") as Sprite2D
+			if hv == null:
+				fails.append("★ 危险物 %s 没有 Visual 子节点 —— 会变成隐形杀手" % h.name)
+			elif hv.texture == null:
+				fails.append("★ 危险物 %s 的 Visual 没有贴图（新 PNG 没 import？）" % h.name)
+			else:
+				hz_ok += 1
+		if hz_ok == hazards.size():
+			oks.append("%d 个危险物都有可见视觉" % hz_ok)
+
+	# ── 世界左右边界墙（用户 2026-10-07）──
+	# 没有墙的话玩家能走出地图边缘掉下去 —— 那看起来像"悬崖"，其实是地图没画完。
+	# 语义：**边界是墙，沟才是无底洞**（"掉出底部就死"由 Main.gd 的 FALL_DEATH_Y 兜底）。
+	# ⚠️ 墙挂在独立的 Bounds 节点下（刻意隐形），所以不会被上面那段 Solids 检查误报。
+	var bounds := scene.get_node_or_null("Bounds")
+	if bounds == null:
+		fails.append("★ 找不到 Bounds —— 世界左右没有边界，玩家会走出地图")
+	else:
+		var missing_walls: Array[String] = []
+		for wn in ["WallLeft", "WallRight"]:
+			if bounds.get_node_or_null(wn) == null:
+				missing_walls.append(wn)
+		if missing_walls.is_empty():
+			oks.append("世界左右各有边界墙")
+		else:
+			fails.append("★ 边界墙缺失：%s" % str(missing_walls))
+
 	for s in oks:
 		push_error("  ✓ " + s)
 	for s in fails:
