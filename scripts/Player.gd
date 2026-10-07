@@ -216,9 +216,39 @@ func _tick_timers(delta: float) -> void:
 ## 碰撞检测返回的是碰撞体本身（敌人的 Body 子节点），
 ## 而 add_to_group("enemy") 加在 Enemy1（父节点）上——两者对不上。
 ## 所以必须向上追溯节点树去找组，不能只判断碰撞体自己。
+## 纯函数：算击退方向（+1 往右 / -1 往左），也就是"把敌人往远离我的方向推"。
+##
+## ⭐ 为什么把它抽成 static：**为了可测**。交接文件里最贵的一条教训是
+##    "headless 测试里 Tween 按渲染帧推进，别靠数物理帧验证动画"——
+##    所以"方向对不对"这条最容易出错的逻辑**直接测纯函数**，
+##    而不是去采样动画中间帧（那种断言会随机失败）。
+##
+## `fallback` 处理玩家与敌人**完全重合**（差值为 0）的情况：按玩家朝向退，
+## 不能退成 0 —— 否则这一刀就没有击退，而"贴脸砍"恰恰是最常见的情形。
+static func knockback_dir(enemy_x: float, player_x: float, fallback: int) -> float:
+	var d := signf(enemy_x - player_x)
+	if d == 0.0:
+		return float(fallback)
+	return d
+
+
 func _on_attack_hit(body: Node2D) -> void:
 	var root := _find_group_ancestor(body, "enemy")
-	if root and root.has_method("kill"):
+	if root == null:
+		return
+
+	# 已经死掉的敌人不再受击：否则"尸体"会被反复推着走（杂兵死了还在地上滑）。
+	if root.has_method("is_dead") and root.is_dead():
+		return
+
+	# ── 受击击退（用户 2026-10-07 排期）──
+	# 用 root 的 global_position 而不是碰撞体 body 的位置 —— body 是子节点。
+	# 先击退再 kill：致死的那一刀**也要退**（否则最后一刀最没劲，
+	# 而那一刀恰恰是玩家最想看反馈的地方）。knockback 实现里不检查 _dead。
+	if root.has_method("knockback"):
+		root.knockback(knockback_dir(root.global_position.x, global_position.x, facing))
+
+	if root.has_method("kill"):
 		# 带上当前附魔元素：杂兵忽略它（保持一击必杀），精英和将来的元素反应会用它。
 		# 所有 kill() 实现都带默认值，所以这条调用对旧实现也安全。
 		root.kill(element)

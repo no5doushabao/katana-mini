@@ -14,6 +14,10 @@ extends SceneTree
 ##   • 注入输入后必须等 2 个物理帧，just_pressed 才为 true
 ##   • 动态造节点要先把子树搭好再 add_child
 
+## 击退方向的纯函数住在 Player.gd 里（只有玩家知道自己在敌人的哪一侧）。
+## 用 preload 拿脚本对象，测试才能**直接**测方向逻辑，而不必采样动画中间帧。
+const PlayerScript := preload("res://scripts/Player.gd")
+
 var _fails: Array[String] = []
 var _passes: Array[String] = []
 
@@ -93,7 +97,20 @@ func _run() -> void:
 	elite.damaged.connect(func(remaining: int) -> void: dmg_log.append(remaining))
 
 	# ── 前 3 刀：都该活着 ──
+	#
+	# ⚠️ 2026-10-07 加入击退后，玩家**不能再站桩连砍**了（实测：4 刀只中 1 刀、血停在 3）：
+	#    第 1 刀把精英推开 KNOCKBACK_DIST(28px)，而攻击框外缘只到玩家前方 59px
+	#    （ATTACK_OFFSET_X 33 + ATTACK_RANGE.x/2 26）→ 原地不动第 2 刀必然砍空。
+	#
+	#    ⭐ **这是设计意图，不是 bug** —— 用户要的就是"砍 → 它退 → 追 → 再砍"的走位，
+	#       把"多砍几刀"从重复劳动变成空间上的博弈。
+	#       所以测试也照真实玩法来：每一刀之前**追上去**，重新贴回 55px 的命中窗口。
+	#       （玩家速度 220px/s，追 28px 只要 0.13 秒，而攻击冷却 0.26 秒 —— 追得上。）
 	for n in range(3):
+		p.global_position.x = elite.global_position.x - 55.0
+		p.velocity = Vector2.ZERO
+		await physics_frame
+		await physics_frame          # 等 attack_area 位置和朝向更新完再出手
 		Input.action_press("attack")
 		await physics_frame
 		await physics_frame
@@ -106,6 +123,10 @@ func _run() -> void:
 
 	# ── 第 4 刀：血尽 ──
 	var kills_before: int = scene.get("kills")
+	p.global_position.x = elite.global_position.x - 55.0
+	p.velocity = Vector2.ZERO
+	await physics_frame
+	await physics_frame
 	Input.action_press("attack")
 	await physics_frame
 	await physics_frame
@@ -645,6 +666,54 @@ func _run() -> void:
 				saw_fading = true
 		_check(saw_fading, "死亡时头顶图标是**淡出**的（不是瞬间硬切）")
 		_check(not icon2.visible, "淡出播完后头顶图标隐藏（不再残留）")
+
+	# ── 受击击退（用户 2026-10-07 排期："可以安排上日程"）──
+	#
+	# 要解决的是用户原话："4 刀手感感觉不出来，因为没做受击动作，只有变色和改大小。"
+	# 设计要点：位移**必须是真的**（退到新位置停住），"回弹"只是过冲后微回 ——
+	# 弹回原位就只是原地抖一下，产生不出"砍→它退→追→再砍"的走位。
+	#
+	# ⚠️ 这里**不采样动画中间帧**：headless 下 Tween 按渲染帧真实时间推进，
+	#    而测试只能 await physics_frame，两者不同步 → 采样断言会随机失败
+	#    （交接文件里最贵的一条教训）。沿用"死亡图标淡出"那条的做法：
+	#    **等足够长的时间，只检查最终状态**。
+	elite.set("is_dummy", false)
+	elite.reset_enemy()
+	await physics_frame
+	var spawn_x: float = elite.global_position.x
+
+	var kd: float = elite.get_knockback_dist()
+	_check(kd > 0.0, "击退距离是正数（%0.1f px）—— '退'必须是真位移" % kd)
+	var ktot: float = elite.get_knockback_total_time()
+	_check(ktot < 0.26,
+		"击退两段之和 %0.2fs < 攻击冷却 0.26s（连砍时不会和上一段打架）" % ktot)
+
+	# ① 方向逻辑：纯函数，直接测 —— 不走动画，因此不会随机失败
+	_check(is_equal_approx(PlayerScript.knockback_dir(100.0, 40.0, 1), 1.0),
+		"敌人在玩家右边 → 往右退（远离玩家）")
+	_check(is_equal_approx(PlayerScript.knockback_dir(-100.0, -40.0, 1), -1.0),
+		"敌人在玩家左边 → 往左退（远离玩家）")
+	# ⭐ 这条是"砍着砍着反被吸过去"那类方向 bug 的守门员
+	_check(PlayerScript.knockback_dir(40.0, 100.0, 1) < 0.0,
+		"敌人在玩家左边时方向为负 —— 绝不会被推向玩家")
+	_check(is_equal_approx(PlayerScript.knockback_dir(50.0, 50.0, -1), -1.0),
+		"玩家与敌人完全重合时按玩家朝向兜底（不会退成 0）")
+
+	# ② 实际位移：等足够久（20 物理帧 ≈ 0.33s > 击退总时长 0.14s），只看最终位置
+	elite.knockback(1.0)
+	_check(elite.get_knock_tween() != null, "调用 knockback 后建出了击退 tween")
+	for i in range(20):
+		await physics_frame
+	var moved: float = elite.global_position.x - spawn_x
+	_check(is_equal_approx(elite.global_position.x, spawn_x + kd),
+		"击退最终停在 出生点+%.0fpx（实际位移 %.1fpx）—— 真的挪窝了，不是弹回原位" % [kd, moved])
+
+	# ③ 复位必须把击退状态清干净（否则玩家死一次，精英就永久挪窝）
+	elite.reset_enemy()
+	await physics_frame
+	_check(is_equal_approx(elite.global_position.x, spawn_x),
+		"复位后回到出生点（击退 tween 被掐掉，没把它拽走）")
+	_check(elite.get_knock_tween() == null, "复位后击退 tween 引用被清空")
 
 	_finish()
 

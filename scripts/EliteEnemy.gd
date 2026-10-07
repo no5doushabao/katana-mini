@@ -92,6 +92,25 @@ const HIT_FLASH_TIME := 0.07     ## 闪白时长
 const HIT_PUNCH_SCALE := 0.22    ## 受击瞬间放大比例（"打得动"的手感）
 const HIT_PUNCH_BACK := 0.09     ## 回弹时间
 
+# ── 受击击退（用户 2026-10-07 排期："可以安排上日程"）──
+#
+# 要解决的手感问题（用户原话）："4 刀手感感觉不出来，因为没做受击动作，
+# 只有变色和改大小"。分析：现在砍 4 刀本质是**原地按 4 次 J** ——
+# **没有空间变化就没有节奏**。
+#
+# ⭐ 关键设计：位移是**真的**（退到新位置停住），"回弹"只是过冲后微回。
+#    如果弹回原位，那就只是原地抖一下（= 强化版震颤），
+#    产生不出用户认同的那个价值 —— 把"多砍几刀"从重复劳动变成
+#    **走位：砍 → 它退 → 追 → 再砍**。
+const KNOCKBACK_DIST := 28.0        ## 每次受击后退的净距离（像素）
+const KNOCKBACK_OVERSHOOT := 1.2    ## 先退过头到 DIST*1.2，再弹回 DIST（"Q 弹"感的来源）
+const KNOCKBACK_OUT_TIME := 0.06    ## 退出去的时间（必须短，慢了就不像"被打飞"）
+const KNOCKBACK_BACK_TIME := 0.08   ## 回弹时间
+#
+# ⚠️ 两段之和**必须**短于 Player 的 ATTACK_COOLDOWN(0.26)：
+#    否则连砍时上一段还没跑完就要开下一段，位置会打架。
+#    测试里钉死了这个**常量关系** —— 而不是去数物理帧（那样会随机失败）。
+
 # ── 死亡动画（两段）──
 # 提成常量，是因为头顶的**附着图标要跟它同步淡出**（用户 2026-10-07 的设计）：
 # 敌人 0.26 秒消失，附着也用 0.26 秒消失 —— 一起生、一起死，语义才自洽。
@@ -165,6 +184,10 @@ var _dead := false
 var _spawn_position := Vector2.ZERO
 var _base_scale := Vector2.ONE
 var _hit_tween: Tween = null
+## 击退用**独立**的 tween。
+## ⚠️ 不能和 _hit_tween 共用一个：那个在管"闪白 + 缩放"，
+##    共用的后果是连砍时互相 kill —— 要么击退被掐掉，要么缩放动画半路失踪。
+var _knock_tween: Tween = null
 
 ## 元素附着状态。_aura_element 为空串表示当前没有附着。
 ## ⚠️ 第一版只允许**一种**附着：新元素直接覆盖旧的（不做"多元素共存"）。
@@ -535,6 +558,53 @@ func _play_hit_reaction(strong: bool = false) -> void:
 	_hit_tween.parallel().tween_property(visual, "scale", _base_scale, HIT_PUNCH_BACK)
 
 
+## 受击击退：朝 dir 退一段，过冲后微回，**停在新位置**。
+##
+## 由 Player.gd 在命中时调用 —— 只有玩家知道自己在敌人的哪一侧。
+##
+## ⚠️ 这里**故意不检查 _dead**：致死的那一刀也要退，否则"最后一刀"反而是
+##    最没劲的一刀。死亡流程动的是 visual 的 modulate/visible，本方法动的是
+##    节点的 global_position，两者互不干扰。
+##
+## ⚠️ 精英是 Node2D、没有物理体，所以位移是**直接改坐标**，不走 velocity。
+##    副作用（已知，先接受）：被推到平台边缘外也会**悬空**（没有重力）。
+##    真要处理得等"关卡边界"一起做；现在宁可让它悬空，也不要它掉下去消失
+##    —— 掉下去就找不回来了，检查点复位链路会跟着变得难查。
+func knockback(dir: float) -> void:
+	if dir == 0.0:
+		return
+	var d := signf(dir)
+
+	# 连砍时上一段还在跑：掐掉它，从**当前实际位置**再退。
+	# 这样连续砍会把它一路推走（正是"追着砍"的来源），
+	# 而不是把位移叠加成一次飞出屏幕。
+	if _knock_tween != null and _knock_tween.is_valid():
+		_knock_tween.kill()
+
+	var from := global_position
+	var peak := from + Vector2(d * KNOCKBACK_DIST * KNOCKBACK_OVERSHOOT, 0.0)
+	var rest := from + Vector2(d * KNOCKBACK_DIST, 0.0)
+
+	_knock_tween = create_tween()
+	_knock_tween.tween_property(self, "global_position", peak, KNOCKBACK_OUT_TIME)
+	_knock_tween.tween_property(self, "global_position", rest, KNOCKBACK_BACK_TIME)
+
+
+## 给测试读的击退参数（避免测试里再写一份数字）
+func get_knockback_dist() -> float:
+	return KNOCKBACK_DIST
+
+
+## 给测试读的"击退动画总时长"：测试用它钉死"连砍不会和上一段打架"
+func get_knockback_total_time() -> float:
+	return KNOCKBACK_OUT_TIME + KNOCKBACK_BACK_TIME
+
+
+## 给测试读的击退 tween（验"真的动了"，而不是靠采样动画中间帧）
+func get_knock_tween() -> Tween:
+	return _knock_tween
+
+
 ## 血量归零：走和普通敌人一样的"隐藏 + 关碰撞"流程
 func _die() -> void:
 	_dead = true
@@ -617,6 +687,14 @@ func _fade_icons_on_death() -> void:
 ## revive_dead = true 时连已死的也复活 —— 保证每次重开都是同样的初始状态，
 ## 否则"死一次少一个敌人"，关卡难度会随重开次数漂移。
 func reset_enemy(revive_dead: bool = true) -> void:
+	# ⚠️ 顺序很关键：**先掐掉击退动画，再设位置**。反了的话，
+	#    "复位到出生点"会被还在跑的 tween 一路拽回它退到的位置 ——
+	#    玩家死一次，精英就永久挪窝（而且不报错，只是每次复活位置都不一样）。
+	#    这是交接文件里"受击回弹动画污染断言"的同一类坑。
+	if _knock_tween != null and _knock_tween.is_valid():
+		_knock_tween.kill()
+	_knock_tween = null
+
 	global_position = _spawn_position
 	if _dead and not revive_dead:
 		return
