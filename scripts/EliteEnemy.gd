@@ -21,6 +21,18 @@ extends Node2D
 ##    测试要数活敌必须问 is_dead()，不能看组的大小。
 
 signal died                     ## 血量归零时发出（Main.gd 靠它计分）
+
+## 碰到玩家造成的伤害（对应 Player 的 HURT_MEDIUM 档 = 中伤害）。
+## 精英比杂兵疼是**故意的** —— 它本来就是"要认真对付"的敌人（§2.7.1 的分层设计）。
+const HURT_DAMAGE := 3
+
+## true = 每物理帧轮询危险区（推荐）；false = 只依赖 body_entered。
+## ⭐ 同 Enemy / PatrolEnemy：body_entered 只在"重叠从无到有"那一帧发一次，
+##    玩家在它身上复活时会拿到"隐形无敌"（§2.6 的老 bug）。
+@export var danger_polling := true
+
+## 木桩的贴图（训练假人，由 tools/gen_dummy_sprite.py 生成）
+const TEX_DUMMY := "res://art/dummy.png"
 signal damaged(remaining: int)  ## 每次受击发出（将来接音效 / 飘字 / HUD 血条）
 signal aura_changed(element: String, remaining: float)  ## 元素附着变化（附着/刷新/消失都发）
 signal reacted(kind: String, damage: int)               ## 发生元素反应（供 HUD / 特效 / 音效）
@@ -102,7 +114,13 @@ const HIT_PUNCH_BACK := 0.09     ## 回弹时间
 #    如果弹回原位，那就只是原地抖一下（= 强化版震颤），
 #    产生不出用户认同的那个价值 —— 把"多砍几刀"从重复劳动变成
 #    **走位：砍 → 它退 → 追 → 再砍**。
-const KNOCKBACK_DIST := 28.0        ## 每次受击后退的净距离（像素）
+## ⭐ 击退**分两档**（阿包 2026-10-07 的判断：「普攻的击退 ≠ 元素反应的击退，该分级」）——
+##    击退有三种身份，全塞进一个数值里就会打架：
+##      · 打击感（小）：普攻，够看出"打中了"就行
+##      · 走位（中）  ：玩家要的"砍 → 它退 → 追 → 再砍"
+##      · 环境杀（大）：**元素反应** —— §2.7 那条"超载 → 击退 → 制造环境杀"
+const KNOCKBACK_DIST := 12.0            ## 普攻：小退（走位感还在，但不会一路被推走）
+const KNOCKBACK_REACTION_DIST := 40.0   ## 元素反应：大退（"把它推下去"就靠这一档）
 const KNOCKBACK_OVERSHOOT := 1.2    ## 先退过头到 DIST*1.2，再弹回 DIST（"Q 弹"感的来源）
 const KNOCKBACK_OUT_TIME := 0.06    ## 退出去的时间（必须短，慢了就不像"被打飞"）
 const KNOCKBACK_BACK_TIME := 0.08   ## 回弹时间
@@ -226,6 +244,7 @@ func _ready() -> void:
 	_spawn_position = global_position
 	if visual:
 		_base_scale = visual.scale
+	_apply_dummy_visual()
 
 	add_to_group("enemy")
 	add_to_group("elite")      # 单独标记：关卡逻辑和测试可以只找精英
@@ -248,6 +267,30 @@ func _ready() -> void:
 func _sync_dummy_danger() -> void:
 	if danger != null:
 		danger.monitoring = not is_dummy
+
+
+## 木桩用**自己的贴图**（训练假人），不和精英共用一张。
+##
+## 2026-10-08 阿包提的：「木桩是木桩，精英是精英，这两个东西还是有本质区别的，
+## 要不然木桩换个贴图？」—— 之前两者长得一模一样，玩家打上去之前根本分不清
+## "这是沙包还是会伤人的怪"。
+##
+## ⚠️ 用**运行时判断**而不是让生成器设贴图：这样不管 is_dummy 来自场景、代码
+##    还是测试，贴图都自动跟着走，生成器不用关心"哪个是木桩"。
+## ⚠️ visual 的类型是 CanvasItem（为了兼容 Sprite2D/ColorRect，见 §8.1 的类型断言坑），
+##    所以换贴图前必须先确认它是 Sprite2D。
+func _apply_dummy_visual() -> void:
+	if not is_dummy or visual == null or not (visual is Sprite2D):
+		return
+	var tex := load(TEX_DUMMY) as Texture2D
+	if tex == null:
+		# ⚠️ 新 PNG 没跑 --import 时 load() 返回 null **而且不报错**（§8.1 老坑）——
+		#    这里主动喊一声，免得"木桩看着还是精英"却没人知道为什么。
+		push_warning("木桩贴图加载失败：%s 是不是没 --import？" % TEX_DUMMY)
+		return
+	var sp := visual as Sprite2D
+	sp.texture = tex
+	sp.region_enabled = false    # dummy.png 是单帧整图，不需要 region 裁切
 
 
 ## 被玩家的攻击判定框罩住时调用（Player.gd 会向上找 "enemy" 组的祖先，所以这里就是根节点）
@@ -486,6 +529,9 @@ func _hide_reaction_icons() -> void:
 ## 而且它同样受 Engine.time_scale 影响 —— 子弹时间下附着也跟着变慢，这是对的
 ## （世界整体放慢，不该只有玩家这边的状态在正常走）。
 func _physics_process(delta: float) -> void:
+	# ⚠️ 轮询判伤必须放**最前面** —— 下面有 `if _aura_element == "": return` 的早退，
+	#    写在后面就变成"只在这家伙身上挂着元素附着时才判伤"（大部分时候不判）。
+	_poll_danger()
 	# 反应锁定窗口先递减 —— 它和附着是两个独立计时，附着为空时也要走
 	_reaction_left = maxf(_reaction_left - delta, 0.0)
 
@@ -570,8 +616,16 @@ func _play_hit_reaction(strong: bool = false) -> void:
 ##    副作用（已知，先接受）：被推到平台边缘外也会**悬空**（没有重力）。
 ##    真要处理得等"关卡边界"一起做；现在宁可让它悬空，也不要它掉下去消失
 ##    —— 掉下去就找不回来了，检查点复位链路会跟着变得难查。
-func knockback(dir: float) -> void:
-	if dir == 0.0:
+func knockback(dir: float, dist: float = KNOCKBACK_DIST) -> void:
+	# ⭐ 木桩**挨打不许动**（阿包 2026-10-07 拍板，2026-10-09 补上实现）。
+	#
+	# 为什么：木桩是"试元素反应的靶子"。它是 Node2D、**没有重力**，被推出平台范围后
+	# 会**悬在半空**，而玩家进不去那个空间 → 永远够不到它，整个功能就废了。
+	# （阿包实机试出来的原话：「打到高台下面 → 玩家进不去那个空间 → 永远够不到它」。）
+	#
+	# ⚠️ 这**不影响打击感**：木桩挨打仍然有受击闪白 + 放大回弹（_hit_tween），
+	#    少的只是"被推走"这一项 —— 而对一个固定靶子来说，那恰恰是灾难。
+	if is_dummy or dir == 0.0:
 		return
 	var d := signf(dir)
 
@@ -582,8 +636,8 @@ func knockback(dir: float) -> void:
 		_knock_tween.kill()
 
 	var from := global_position
-	var peak := from + Vector2(d * KNOCKBACK_DIST * KNOCKBACK_OVERSHOOT, 0.0)
-	var rest := from + Vector2(d * KNOCKBACK_DIST, 0.0)
+	var peak := from + Vector2(d * dist * KNOCKBACK_OVERSHOOT, 0.0)
+	var rest := from + Vector2(d * dist, 0.0)
 
 	_knock_tween = create_tween()
 	_knock_tween.tween_property(self, "global_position", peak, KNOCKBACK_OUT_TIME)
@@ -593,6 +647,25 @@ func knockback(dir: float) -> void:
 ## 给测试读的击退参数（避免测试里再写一份数字）
 func get_knockback_dist() -> float:
 	return KNOCKBACK_DIST
+
+
+## 这一刀该把它推多远 —— **由它自己回答**（阿包 2026-10-07 的分级判断，10-09 实现）。
+##
+## 为什么不问玩家：玩家不知道敌人身上附着着什么（那是敌人的状态），去查就成了耦合；
+## "这一刀会不会触发反应"本来就是它的内部知识。
+##
+## ⚠️ 判定**复用 resolve_reaction()**，绝不另写一份 —— 否则迟早出现
+##    "抖了但没退"或"退了但没抖"这种不一致（那份注释也是这么说的）。
+## ⚠️ 调用时机必须在 kill() **之前**：反应会消耗附着，等反应发生后再问就问不到了。
+func get_knockback_for(attacking: String) -> float:
+	if resolve_reaction(attacking) != "":
+		return KNOCKBACK_REACTION_DIST
+	return KNOCKBACK_DIST
+
+
+## 给测试读的"反应档"击退距离
+func get_knockback_dist_reaction() -> float:
+	return KNOCKBACK_REACTION_DIST
 
 
 ## 给测试读的"击退动画总时长"：测试用它钉死"连砍不会和上一段打架"
@@ -732,9 +805,9 @@ func reset_enemy(revive_dead: bool = true) -> void:
 
 
 func _on_danger_body_entered(body: Node2D) -> void:
-	# 和杂兵一致：延迟一帧再判死，让同帧内的玩家攻击优先成立，
+	# 和杂兵一致：延迟一帧再判伤，让同帧内的玩家攻击优先成立，
 	# 避免"我砍中它、但同时被它撞死"。
-	_kill_player_deferred.call_deferred(body)
+	_hit_player_deferred.call_deferred(body)
 
 
 ## 供测试 / 关卡逻辑查询死活
@@ -819,12 +892,29 @@ func get_reaction_icon() -> Sprite2D:
 	return reaction_icon
 
 
-func _kill_player_deferred(body: Node2D) -> void:
+## 每物理帧轮询危险区里的玩家 —— 兜底判伤
+func _poll_danger() -> void:
+	if _dead or not danger_polling:
+		return
+	if danger == null or not is_instance_valid(danger) or not danger.monitoring:
+		return
+	for body in danger.get_overlapping_bodies():
+		if body is Node2D and _find_group_ancestor(body, "player") != null:
+			_hit_player_deferred.call_deferred(body)
+			return
+
+
+func _hit_player_deferred(body: Node2D) -> void:
 	if _dead:
 		return
 	# 同样要向上找组：碰撞体未必就是挂了脚本的那个节点
 	var root := _find_group_ancestor(body, "player")
-	if root and root.has_method("die"):
+	if root == null:
+		return
+	# 优先走血量系统（take_damage）；die() 只作兜底
+	if root.has_method("take_damage"):
+		root.take_damage(HURT_DAMAGE)
+	elif root.has_method("die"):
 		root.die()
 
 

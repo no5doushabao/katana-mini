@@ -78,6 +78,9 @@ const GROUP_PLAYER := "player"
 ## 每帧轮询 get_overlapping_bodies() 没有这个问题，代价是每个敌人每帧一次列表查询。
 @export var danger_polling := true
 
+## 碰到玩家造成的伤害（对应 Player 的 HURT_SMALL 档）
+const HURT_DAMAGE := 1
+
 # ────────────────────────────── 内部状态 ──────────────────────────────
 
 var _dead := false
@@ -442,7 +445,12 @@ func _kill_player_deferred(body: Node2D) -> void:
 	if not is_instance_valid(body):
 		return
 	var root := _find_group_ancestor(body, GROUP_PLAYER)
-	if root and root.has_method("die"):
+	if root == null:
+		return
+	# 优先走血量系统（take_damage）；die() 只作兜底（万一对象没有血量接口）
+	if root.has_method("take_damage"):
+		root.take_damage(HURT_DAMAGE)
+	elif root.has_method("die"):
 		root.die()
 
 

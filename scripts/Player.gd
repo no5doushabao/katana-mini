@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 ## 切换附魔元素时发出（HUD / 音效 / 粒子可以接）
 signal element_changed(element: String)
+signal hp_changed(hp: int, max_hp: int)   ## 血量变化时发出（HUD 血条刷新用）
 
 ## 玩家控制器 —— 迷刀 Mini 的核心手感所在
 ##
@@ -65,6 +66,38 @@ const SLOW_REGEN := 0.55          ## 每秒恢复（比消耗慢，所以不能�
 ## 玩家速度补偿系数：1.0 = 不补偿（玩家也变慢），0.0 = 完全补偿（玩家保持原速）
 ## 这是子弹时间手感最关键的旋钮，试着改成 0.5 感受区别
 const SLOW_PLAYER_SPEED_KEEP := 0.0
+
+# ── 生命值 / 受击（2026-10-08 阿包拍板：主角不再"一击必杀"）──
+# 三档伤害 → 三档反馈。数值与抖动参数**全做成常量**：调手感只改这里，不碰逻辑。
+# ⚠️ 坠落走独立入口 take_fall_damage()：**失去全部生命**，抖动比"大伤害"再重一档。
+const MAX_HP := 20                 ## 总血量（阿包定 20，可调）
+const IFRAME_TIME := 0.6           ## 受击后无敌时间 —— 没有它，贴着敌人会 1 帧掉光血
+const HURT_FLASH_TIME := 0.22      ## 受击闪红时长（小伤害**不抖屏**，靠这个给反馈）
+const HURT_FLASH_COLOR := Color(1.0, 0.35, 0.35, 1.0)   ## 受击时角色染成的红（modulate 乘法）
+
+const HURT_SMALL := 1              ## 小伤害：蹭一下（杂兵 / 巡逻兵）
+const HURT_MEDIUM := 3             ## 中伤害：明显挨了一下（精英）
+const HURT_LARGE := 6              ## 大伤害：出事了（移动危险物）
+
+const SHAKE_MEDIUM_PX := 3.0       ## 中伤害：抖 3 像素
+const SHAKE_MEDIUM_TIME := 0.25    ##          持续 0.25 秒
+const SHAKE_LARGE_PX := 7.0        ## 大伤害：抖 7 像素
+const SHAKE_LARGE_TIME := 0.45     ##          持续 0.45 秒
+const SHAKE_FALL_PX := 8.0         ## 坠落：抖 8 像素
+const SHAKE_FALL_TIME := 0.5       ##       持续 0.5 秒
+
+# ── 屏幕抖动（trauma 模型）──
+# trauma 从 1 衰减到 0；幅度按"整像素阶梯"给，位移再从阶梯里随机跳。
+#
+# ⚠️ 像素画的两条天条：**只平移、只整数**。旋转抖会让整幅画面重采样（糊）；
+#    抖非整数像素会让像素在亚像素级漂移（画面像"翻滚/闪烁"）。
+#
+# ⭐ 为什么幅度必须"先量化成整数阶梯、再从阶梯里随机跳"（2026-10-08 实测）：
+#    直觉写法是"连续噪声 × 幅度，再 roundf"——采样 60 帧发现**只有 2 帧真在动**，
+#    其余全被 roundf 抹成 0px，等于没抖、而且不报错。**量化要放在"幅度"这一层。**
+const SHAKE_POWER := 2.0           ## 幅度 = max_px × trauma^power（平方 = 尾部收得干脆）
+const SHAKE_DEFAULT_PX := 6.0      ## add_trauma() 不带参数时的默认幅度
+const SHAKE_DEFAULT_TIME := 0.45   ## add_trauma() 不带参数时的默认时长（秒）
 
 # ────────────────────────────── 内部状态 ──────────────────────────────
 
@@ -138,6 +171,16 @@ var _arc_active := false             ## 上一帧月牙是否激活（用来决�
 
 var _anim_time := 0.0          ## 动画计时器（累加 delta）
 
+var _trauma := 0.0             ## 屏幕抖动"创伤值"（0~1）：每次抖动从 1 衰减到 0
+var _shake_max := SHAKE_DEFAULT_PX                  ## 本次抖动的幅度（整数像素）
+var _shake_decay := 1.0 / SHAKE_DEFAULT_TIME        ## trauma 每秒衰减量（由"时长"换算）
+## 抖动用的独立随机源 —— 不用全局 randi，免得影响敌人巡逻等别处的随机序列
+var _shake_rng := RandomNumberGenerator.new()
+
+var hp := MAX_HP               ## 当前生命值（受击扣、复活回满）
+var _iframe := 0.0             ## 无敌帧剩余（>0 时免疫伤害）
+var _hurt_flash := 0.0         ## 受击闪红剩余
+
 func _ready() -> void:
 	add_to_group("player")
 	# 攻击判定框罩住敌人时，由这里负责"击杀"。
@@ -145,7 +188,12 @@ func _ready() -> void:
 	# 必须有人接收信号并执行后果，否则就是"检测到了但没人管"。
 	attack_area.body_entered.connect(_on_attack_hit)
 
+	_shake_rng.randomize()
+
 func _physics_process(delta: float) -> void:
+	# ⚠️ 抖屏必须放**最前面**（在下面 `if _is_dead: return` 的早退之前）：
+	#    死亡那一刻才是最需要抖的时候，写在早退之后 = 死了反而不抖。
+	_update_shake(delta)
 	# 精灵切帧放最前面：即使死了也要把帧摆对（死亡状态显示下落帧）
 	_update_sprite(delta)
 	if _is_dead:
@@ -188,11 +236,118 @@ func _physics_process(delta: float) -> void:
 
 # ────────────────────────────── 各子系统 ──────────────────────────────
 
+## 屏幕抖动：抖 max_px 个像素、持续 duration 秒 —— **所见即所得**。
+##
+## 为什么不用"只给一个 trauma 值"：trauma 会**同时**改幅度和时长，
+## 想让"中等伤害抖得轻一点"就会连带把它变成"又轻又短"（实测过：0.5 trauma
+## 只抖 0.13 秒，看起来像没抖）。分开两个参数，档位才调得动。
+func shake(max_px: float, duration: float) -> void:
+	if max_px <= 0.0 or duration <= 0.0:
+		return
+	_shake_max = max_px
+	_shake_decay = 1.0 / duration
+	_trauma = 1.0
+
+
+## 攒"创伤值"（不带幅度/时长参数时走默认值）
+func add_trauma(amount: float) -> void:
+	_trauma = clampf(_trauma + amount, 0.0, 1.0)
+
+
+func get_trauma() -> float:
+	return _trauma
+
+
+func get_hp() -> int:
+	return hp
+
+
+func get_max_hp() -> int:
+	return MAX_HP
+
+
+## 受击入口 —— **敌人 / 危险物都该调这个，不要再直接调 die()**。
+##
+## 伤害值决定反馈档位（"数值 → 反馈"的映射集中在玩家身上，敌人只管"我打多少"）：
+##   小(1) = 不抖屏，只闪红 + 血条掉一格（零反馈会让玩家不知道被打中）
+##   中(3) = 抖 3px / 0.25s
+##   大(6) = 抖 7px / 0.45s
+##
+## ⚠️ 无敌帧是**必需**的：没有它，贴着敌人时每物理帧扣一次 → 1 帧掉光血。
+##    它同时兜住了"重叠状态不变就永不判伤"的老 bug（见 Enemy/Hazard 的轮询判伤）。
+func take_damage(amount: int) -> void:
+	if _is_dead or amount <= 0:
+		return
+	if _iframe > 0.0:
+		return   # 无敌帧内免疫；**不重置计时**，否则贴着敌人会永远无敌
+	hp = maxi(hp - amount, 0)
+	_iframe = IFRAME_TIME
+	_hurt_flash = HURT_FLASH_TIME
+	if amount >= HURT_LARGE:
+		shake(SHAKE_LARGE_PX, SHAKE_LARGE_TIME)
+	elif amount >= HURT_MEDIUM:
+		shake(SHAKE_MEDIUM_PX, SHAKE_MEDIUM_TIME)
+	# 小伤害刻意不抖屏：抖动留给"真的疼"，小伤害靠闪红 + HUD 掉格给反馈
+	_update_element_visual()   # 立刻闪红（别等下一帧的主循环，否则反馈晚一帧）
+	hp_changed.emit(hp, MAX_HP)
+	if hp <= 0:
+		die()
+
+
+## 坠落：**失去全部生命**（2026-10-08 阿包定）。
+## 单独一个入口，因为它的抖动档位比"大伤害"更重，而且不走"扣血"那套。
+func take_fall_damage() -> void:
+	if _is_dead:
+		return
+	hp = 0
+	_iframe = IFRAME_TIME
+	_hurt_flash = HURT_FLASH_TIME
+	shake(SHAKE_FALL_PX, SHAKE_FALL_TIME)
+	_update_element_visual()
+	hp_changed.emit(hp, MAX_HP)
+	die()
+
+
+## 屏幕抖动：位移挂在 Camera2D.offset 上。
+## 相机是玩家的子节点 → 抖的是"画面"，**不影响玩家位置、碰撞、关卡逻辑**（纯表现层）。
+## HUD 在 CanvasLayer 里（main.tscn），天然不受相机影响 → UI 不会被抖。
+func _update_shake(delta: float) -> void:
+	if _trauma <= 0.0:
+		if camera:
+			camera.offset = Vector2.ZERO   # 收尾必须归零，否则相机永远歪着
+		return
+
+	# ⭐ 用**真实时间**衰减：子弹时间把世界放慢 3 倍时，打击反馈不该跟着变慢。
+	#    反例：若直接用被缩放的 delta，开慢动作死亡 → 抖屏要 5 秒真实时间才停，
+	#    而复活（RESPAWN_DELAY 走的是物理时间）只要 1.5 秒 → 相机歪着复活。
+	var real_delta := delta / maxf(Engine.time_scale, 0.05)
+	_trauma = maxf(_trauma - _shake_decay * real_delta, 0.0)
+
+	if camera == null:
+		return   # 没有相机（测试场景）时照常衰减，只是没东西可抖
+
+	# ⭐ 幅度**量化成整数像素阶梯**，再从阶梯里随机跳 —— 这是实测改出来的：
+	#    第一版是"连续噪声 × 幅度，再 roundf"，用 _shake_probe.gd 采样 60 帧发现
+	#    绝大部分帧被抹成 0px、只有零星 1px（等于没抖）。
+	#    改成整数阶梯后：满 trauma 抖 SHAKE_MAX_OFFSET px，随后逐级收（6→4→2→1→0），
+	#    每帧都真在动，而且天生落在整数像素上（像素画不会糊）。
+	var max_px := int(roundf(_shake_max * pow(_trauma, SHAKE_POWER)))
+	if max_px <= 0:
+		camera.offset = Vector2.ZERO
+		return
+	camera.offset = Vector2(
+		float(_shake_rng.randi_range(-max_px, max_px)),
+		float(_shake_rng.randi_range(-max_px, max_px)))
+
+
 func _tick_timers(delta: float) -> void:
 	_dash_cd = maxf(_dash_cd - delta, 0.0)
 	_attack_cd = maxf(_attack_cd - delta, 0.0)
 	_attack_left = maxf(_attack_left - delta, 0.0)
 	_jump_buffer = maxf(_jump_buffer - delta, 0.0)
+	# 受击相关：无敌帧（"不会一帧掉光血"的关键）与闪红
+	_iframe = maxf(_iframe - delta, 0.0)
+	_hurt_flash = maxf(_hurt_flash - delta, 0.0)
 
 	if is_on_floor():
 		_coyote = COYOTE_TIME
@@ -245,8 +400,19 @@ func _on_attack_hit(body: Node2D) -> void:
 	# 用 root 的 global_position 而不是碰撞体 body 的位置 —— body 是子节点。
 	# 先击退再 kill：致死的那一刀**也要退**（否则最后一刀最没劲，
 	# 而那一刀恰恰是玩家最想看反馈的地方）。knockback 实现里不检查 _dead。
+	#
+	# ⭐ 2026-10-09：**普攻 / 元素反应分级**（阿包 10-07 的第 2 条判断）。
+	#    力度**问敌人一句**（get_knockback_for）—— 它自己知道身上附着着什么、
+	#    这一刀会不会触发反应，玩家去查就成了耦合。
+	#    ⚠️ 必须"问一句、退一次"：如果让反应那边事后再补一次击退，
+	#       会叠加（knockback 是从**当前**位置再退），总距离失控。
+	#    ⚠️ 问的时机在 kill() **之前** —— 反应会消耗附着，等反应后再问就问不到了。
 	if root.has_method("knockback"):
-		root.knockback(knockback_dir(root.global_position.x, global_position.x, facing))
+		var kb_dir := knockback_dir(root.global_position.x, global_position.x, facing)
+		if root.has_method("get_knockback_for"):
+			root.knockback(kb_dir, root.get_knockback_for(element))
+		else:
+			root.knockback(kb_dir)
 
 	if root.has_method("kill"):
 		# 带上当前附魔元素：杂兵忽略它（保持一击必杀），精英和将来的元素反应会用它。
@@ -405,6 +571,11 @@ func get_element_label() -> String:
 
 
 ## 被任何危险物（敌人、陷阱）碰到时由它们调用
+## 死亡。
+##
+## ⚠️ 2026-10-08 起**敌人 / 危险物不该再直接调它** —— 它们改调 take_damage()，
+##    由血量决定生死（血量归零才会走到这里）。
+##    抖动也搬到了那两个入口（不同伤害档位抖得不一样），所以这里不再抖。
 func die() -> void:
 	if _is_dead:
 		return
@@ -424,6 +595,17 @@ func respawn(at: Vector2) -> void:
 	_attack_left = 0.0
 	# 清掉切换闪光，但**保留当前元素** —— 死一次不该逼玩家重新选属性
 	_switch_flash = 0.0
+	# 血量回满 + 清无敌帧/闪红。
+	# ⚠️ **必须回满**：否则会出现"残血复活 → 一碰就死 → 死亡螺旋"；
+	#    而且检查点复位本来就会重置敌人，两边状态一致才对得上。
+	hp = MAX_HP
+	_iframe = 0.0
+	_hurt_flash = 0.0
+	hp_changed.emit(hp, MAX_HP)
+	# 兜底：万一抖动还没播完就复活了，别让相机歪着跟玩家跑
+	_trauma = 0.0
+	if camera:
+		camera.offset = Vector2.ZERO
 
 
 ## 根据当前状态切换精灵帧

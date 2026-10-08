@@ -56,17 +56,19 @@ const STATIC_ENEMIES := [
 	[700.0, 463.0],      # 屏1：平坦地面，冲过去砍
 	[1700.0, 463.0],     # 屏2：对岸
 ]
-# 精英敌人：[x, y] —— 要砍 4 刀（scripts/EliteEnemy.gd），用来体现"元素"的价值
-# 放在屏1 出生点右侧不远处：玩家一开局就能撞见，不用先跑两屏才试到新东西。
+# 精英 / 木桩：[x, y, 是否木桩]
+#
+# ⭐ 2026-10-08 阿包拍板：「木桩是木桩，精英是精英，这两个东西还是有本质区别的」
+#    → 从"全局一个 ELITE_IS_DUMMY 开关"改成**按个体标注**，并且**两个都留**：
+#      · 屏1 的木桩：无限血（打空回满）、不伤害玩家 —— 专门用来反复试元素反应
+#      · 屏3 的真精英：砍 4 刀死、碰到你扣 3 血（**"中伤害"档唯一的来源**）
+#    贴图也分开了：木桩用 art/dummy.png（训练假人），精英用 enemy_sheet。
+#
 # ⚠️ 别和 STATIC_ENEMIES 的位置重叠：两个敌人叠在一起会互相遮挡，也不好判断谁在挨打。
 const ELITES := [
-	[450.0, 463.0],      # 屏1：出生点（x=120）与第一个靶子（x=700）之间
+	[450.0, 463.0, true],     # 屏1：木桩（沙包）—— 出生点(x=120)与第一个靶子(x=700)之间
+	[2412.0, 463.0, false],   # 屏3：真精英 —— 左右扫危险物(2185~2375)与平台2(2450~)之间的空档
 ]
-
-## 精英是否作为**无限血木桩**（用户 2026-10-07：要反复试各种元素反应）。
-## 打开后：血打空立刻回满（不死）、且不伤害玩家。
-## 想恢复成"4 刀的精英"把它改成 false 即可。
-const ELITE_IS_DUMMY := true
 # 巡逻敌人：[x, y, 左边界, 右边界]
 const PATROLS := [
 	[1500.0, 463.0, -110.0, 110.0],   # 屏2：沟后地面巡逻
@@ -355,7 +357,7 @@ func _build() -> void:
 
 		# ⚠️ 必须在 add_child() **之前** set：_ready() 在进树时同步执行，
 		#    它会读 is_dummy 来决定要不要关掉危险区。
-		elite.set("is_dummy", ELITE_IS_DUMMY)
+		elite.set("is_dummy", bool(el[2]))
 
 		enemies.add_child(elite)            # 子树齐了才进树
 
@@ -399,27 +401,94 @@ func _build() -> void:
 		#    Hazard 以为"没配"就自建一个；生成器再加一个就会出现两个碰撞体
 		#    （第二个会被 Godot 命名成 @CollisionShape2D@2）。
 
-	# ═══ 6. HUD（Main.gd 需要 HUD/Info 和 HUD/SlowBar）═══
+	# ═══ 6. HUD（Main.gd 需要 HUD/Info、HUD/HpBar、HUD/SlowBar、HUD/HelpText）═══
+	#
+	# ⚠️ 2026-10-08 重排。原来 Info 是"一个 Label 装 2~3 行"（状态行 + 操作提示行 +
+	#    精英血量行），但它的框只有 30px 高、装不下一行 18px 中文（实际行高约 25px），
+	#    于是第 2、3 行**画出框外**（Label 默认不裁切）→ 正好压在 SlowBar 上。
+	#    用户报的"子弹时间那行字重叠了"就是这个：**文字溢出的框，不是间距问题**。
+	#    现在拆成四块、每块一行、行距拉开：
+	#      Info(左上 1~2 行) → HpBar → SlowBar →（屏幕底部）HelpText
 	var hud := CanvasLayer.new()
 	hud.name = "HUD"
 	scene.add_child(hud)
+
 	var info := Label.new()
 	info.name = "Info"
 	info.offset_left = 16.0
-	info.offset_top = 12.0
+	info.offset_top = 10.0
 	info.offset_right = 760.0
-	info.offset_bottom = 42.0
+	info.offset_bottom = 62.0      # 两行（状态行 + 精英血量行），18px 字够用
 	info.add_theme_font_size_override("font_size", 18)
 	hud.add_child(info)
+
+	# 玩家血条（20 格）。放在 Info 正下方 —— 血量和"我还能挨几下"是最该一眼看到的
+	var hp := Label.new()
+	hp.name = "HpBar"
+	hp.offset_left = 16.0
+	hp.offset_top = 70.0
+	hp.offset_right = 760.0
+	hp.offset_bottom = 100.0
+	hp.add_theme_font_size_override("font_size", 16)
+	hud.add_child(hp)
 
 	var bar := Label.new()
 	bar.name = "SlowBar"
 	bar.offset_left = 16.0
-	bar.offset_top = 68.0
+	bar.offset_top = 106.0
 	bar.offset_right = 760.0
-	bar.offset_bottom = 98.0
+	bar.offset_bottom = 136.0
 	bar.add_theme_font_size_override("font_size", 16)
 	hud.add_child(bar)
+
+	# 操作提示挪到**屏幕底部**：它是最不常看的文字，原来占着左上第二行 ——
+	# 既挤掉血条的位置，又和 SlowBar 贴得太近。
+	var help := Label.new()
+	help.name = "HelpText"
+	help.anchor_top = 1.0
+	help.anchor_bottom = 1.0
+	help.offset_left = 16.0
+	help.offset_top = -34.0
+	help.offset_right = 944.0
+	help.offset_bottom = -8.0
+	help.add_theme_font_size_override("font_size", 13)
+	hud.add_child(help)
+
+	# ── 当前元素图标（阿包 2026-10-09 睡前要的）：右上角一个方框 + 元素图 ──
+	#
+	# 为什么放右上角：左上那三行（Info / 血条 / 子弹时间）已经排满，
+	# 而"我这一刀是什么属性"是战斗里最该一眼看到的 —— 右上角独立、醒目、不挤。
+	#
+	# ⚠️ 尺寸必须**整数倍**放大：图标源文件是 32×32，这里显示 64×64（2 倍）。
+	#    非整数倍会让像素大小不均 → 糊（§2.14 ④ 那条老账，全项目都该守）。
+	# ⚠️ `texture_filter = NEAREST`：不加的话 Godot 会做线性插值，
+	#    放大后的像素边缘会发虚 —— 像素画的放大只有"最近邻"是对的。
+	var frame := Panel.new()
+	frame.name = "ElemFrame"
+	frame.anchor_left = 1.0
+	frame.anchor_right = 1.0
+	frame.offset_left = -88.0
+	frame.offset_right = -16.0
+	frame.offset_top = 12.0
+	frame.offset_bottom = 84.0
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.09, 0.12, 0.85)
+	style.border_color = Color(0.62, 0.62, 0.70, 1.0)
+	style.set_border_width_all(2)
+	frame.add_theme_stylebox_override("panel", style)
+	hud.add_child(frame)
+
+	var elem_icon := TextureRect.new()
+	elem_icon.name = "ElemIcon"
+	elem_icon.anchor_left = 1.0
+	elem_icon.anchor_right = 1.0
+	elem_icon.offset_left = -84.0     # 框内缩 4px
+	elem_icon.offset_right = -20.0
+	elem_icon.offset_top = 16.0
+	elem_icon.offset_bottom = 80.0
+	elem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	elem_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	hud.add_child(elem_icon)
 
 	# ═══ 7. 玩家（挪到屏1 出生点）═══
 	var player := scene.get_node_or_null("Player")

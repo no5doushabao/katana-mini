@@ -21,13 +21,25 @@ const RESPAWN_DELAY := 0.45   ## 死亡后停顿多久再回检查点（太短�
 ##    也就是**掉出画面之后**才判死。正常跳跃（约 65px 高）和落回平台绝不会被误伤。
 const FALL_DEATH_Y := 620.0
 
+## 操作提示文案（放在代码里 —— 改文案不用重跑生成器）
+const HELP_TEXT := "← → 移动   空格 跳   K 冲刺   J 攻击   L 切换元素   Shift 子弹时间   R 重开"
+
+## 元素图标目录：**文件名 = 元素名**（§2.13 的约定 —— 以后加冰/雷/草只要生成同名 PNG，
+## 这里一行都不用改）
+const ELEMENT_ICON_DIR := "res://art/elements/"
+
 var checkpoint: Vector2 = Vector2.ZERO
 var lives := 0                ## 死亡次数（顺手统计，调难度时有用）
 var kills := 0                ## 击杀数
 
 @onready var player: CharacterBody2D = $Player
-@onready var hud: Label = $HUD/Info
-@onready var slow_bar: Label = $HUD/SlowBar
+@onready var hud: Label = $HUD/Info            ## 左上：击杀 / 死亡 / 当前元素（+ 精英血量）
+## 下面三个用 get_node_or_null：节点万一没生成出来，只是"少一行显示"，
+## 而不是抛 null 异常把整个关卡打断（Enemy.gd 里同样的理由）。
+@onready var hp_bar: Label = get_node_or_null("HUD/HpBar") as Label        ## 左上：玩家血条
+@onready var slow_bar: Label = get_node_or_null("HUD/SlowBar") as Label    ## 左上：子弹时间能量
+@onready var help_text: Label = get_node_or_null("HUD/HelpText") as Label  ## 底部：操作提示
+@onready var elem_icon: TextureRect = get_node_or_null("HUD/ElemIcon") as TextureRect  ## 右上：当前元素图标
 
 var _respawn_timer := -1.0
 
@@ -51,11 +63,38 @@ func _ready() -> void:
 	if player and player.has_signal("element_changed"):
 		player.element_changed.connect(_on_element_changed)
 
+	# 血量变化 → 刷新血条。用信号而不是每帧刷：血条只在受击/复活时才变。
+	if player and player.has_signal("hp_changed"):
+		player.hp_changed.connect(_on_hp_changed)
+
+	if help_text:
+		help_text.text = HELP_TEXT
+
 	_update_hud()
+	_update_hp_bar()
+	_update_element_icon()
 
 
 func _on_element_changed(_element: String) -> void:
 	_update_hud()
+	_update_element_icon()
+
+
+## 右上角方框里的**当前元素图标**（阿包 2026-10-09 睡前要的）。
+##
+## ⚠️ 贴图加载失败时 load() 返回 **null 而且不报错**（§8.1 老坑：新 PNG 没 --import
+##    就会这样）—— 所以这里主动喊一声，否则表现只是"框里空着"，谁也不知道为什么。
+func _update_element_icon() -> void:
+	if elem_icon == null or player == null:
+		return
+	var elem: String = str(player.get("element"))
+	if elem == "":
+		return
+	var tex := load(ELEMENT_ICON_DIR + elem + ".png") as Texture2D
+	if tex == null:
+		push_warning("元素图标缺失或没 import：%s%s.png" % [ELEMENT_ICON_DIR, elem])
+		return
+	elem_icon.texture = tex
 
 
 ## 由检查点区域（Area2D）调用：更新复活点
@@ -93,11 +132,14 @@ func _process(delta: float) -> void:
 		_restart_level()
 		return
 
-	# ── 掉出世界底部 = 死（阈值依据见 FALL_DEATH_Y）──
+	# ── 掉出世界底部 = **失去全部生命**（阈值依据见 FALL_DEATH_Y）──
 	# 用 _is_dead 而不是 _respawn_timer 判重：人已经死了就别再判一次，
-	# 否则整个坠落过程会每帧调 die()（die() 自己有守卫，但没必要）。
+	# 否则整个坠落过程会每帧调一次（那边自己有守卫，但没必要）。
 	if player and not player.get("_is_dead") and player.global_position.y > FALL_DEATH_Y:
-		player.die()
+		if player.has_method("take_fall_damage"):
+			player.take_fall_damage()   # 全损 + 坠落的专用抖动档位
+		else:
+			player.die()
 
 	if _respawn_timer > 0.0:
 		_respawn_timer -= delta
@@ -106,6 +148,28 @@ func _process(delta: float) -> void:
 			_reset_enemies_after(checkpoint)
 			player.respawn(checkpoint)
 			_update_hud()
+			_update_hp_bar()
+
+
+## 玩家血条：20 格方块，**一格 = 1 点血**（20 血正好一格一滴，读数最直观）
+func _update_hp_bar() -> void:
+	if hp_bar == null or player == null:
+		return
+	var cur: int = int(player.get("hp"))
+	# ⚠️ 血量上限走 get_max_hp()，不用 player.get("MAX_HP")：
+	#    get() 读的是"属性"，常量不保证读得到（别学 _update_slow_bar 里那种写法）。
+	var cap: int = 20
+	if player.has_method("get_max_hp"):
+		cap = player.get_max_hp()
+	if cap <= 0:
+		return
+	var filled := clampi(int(round(float(cur) / float(cap) * 20.0)), 0, 20)
+	hp_bar.text = "生命 %s %d/%d" % [
+		"█".repeat(filled) + "░".repeat(20 - filled), cur, cap]
+
+
+func _on_hp_changed(_hp: int, _max_hp: int) -> void:
+	_update_hp_bar()
 
 
 ## 用方块字符画一根能量条。纯文字，不用额外素材
@@ -136,14 +200,17 @@ func _restart_level() -> void:
 	get_tree().reload_current_scene()
 
 
+## 左上 Info：状态行 +（有精英时）精英血量行。
+##
+## ⚠️ 操作提示**不在这里了** —— 它已搬到屏幕底部的 HelpText。
+##    原来两行塞进同一个 Label，把 30px 的框撑爆，文字画出框外压到 SlowBar 上，
+##    就是用户报的"子弹时间那行字重叠了"。
 func _update_hud() -> void:
 	if hud:
 		var elem := "-"
 		if player and player.has_method("get_element_label"):
 			elem = player.get_element_label()
-		hud.text = ("击杀 %d    死亡 %d    【当前元素：%s】\n"
-			+ "← → 移动   空格 跳   K 冲刺   J 攻击   L 切换元素   Shift 子弹时间   R 重开"
-			) % [kills, lives, elem]
+		hud.text = "击杀 %d    死亡 %d    【当前元素：%s】" % [kills, lives, elem]
 		# 精英 / 木桩的血量。
 		# 试元素反应时必须看得见血量变化 —— 尤其木桩是"打空就回满"，
 		# 没有血条的话，那一轮打空在视觉上是完全看不出来的。

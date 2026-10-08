@@ -24,6 +24,15 @@ var body_shape: CollisionShape2D
 var visual: CanvasItem
 var _spawn_position := Vector2.ZERO
 
+## 碰到玩家造成的伤害（对应 Player 的 HURT_SMALL 档）
+const HURT_DAMAGE := 1
+
+## true = 每物理帧轮询危险区（推荐）；false = 只依赖 body_entered 信号。
+## ⭐ 2026-10-08：默认改 true —— body_entered 只在"重叠从无到有"那一帧发一次，
+##    玩家在敌人身上复活时信号不再发，会拿到"隐形无敌"（§2.6 记的老 bug）。
+##    这个修法是从 PatrolEnemy._poll_danger() 抄的（那边早就修了，这边漏了）。
+@export var danger_polling := true
+
 
 func _ready() -> void:
 	# 用 get_node_or_null 而不是 @onready：
@@ -37,6 +46,22 @@ func _ready() -> void:
 
 	if danger:
 		danger.body_entered.connect(_on_danger_body_entered)
+
+
+## 每物理帧检查危险区里的玩家 —— **兜底判伤**。
+##
+## 和 body_entered 是双保险：body_entered 管"刚接触那一帧"立刻响应，
+## 轮询管"一直重叠着"（复活在敌人身上、被推回来）。
+## 两者可能同帧都触发 → 由玩家侧的无敌帧去重，不会重复扣血。
+func _physics_process(_delta: float) -> void:
+	if _dead or not danger_polling:
+		return
+	if danger == null or not is_instance_valid(danger) or not danger.monitoring:
+		return
+	for body in danger.get_overlapping_bodies():
+		if body is Node2D and _find_group_ancestor(body, "player") != null:
+			_hit_player_deferred.call_deferred(body)
+			return
 
 
 ## 复活/复位：由 Main.gd 在玩家死亡后对"检查点之后"的敌人调用
@@ -105,8 +130,8 @@ func _hide_on_death() -> void:
 
 
 func _on_danger_body_entered(body: Node2D) -> void:
-	# 延迟一帧再判死，给同帧内的玩家攻击留出优先权
-	_kill_player_deferred.call_deferred(body)
+	# 延迟一帧再判伤，给同帧内的玩家攻击留出优先权
+	_hit_player_deferred.call_deferred(body)
 
 
 ## 供测试/关卡逻辑查询死活状态
@@ -117,12 +142,17 @@ func is_dead() -> bool:
 	return _dead
 
 
-func _kill_player_deferred(body: Node2D) -> void:
+func _hit_player_deferred(body: Node2D) -> void:
 	if _dead:
 		return
 	# 同样要向上找组：碰撞体未必就是挂了脚本的那个节点
 	var root := _find_group_ancestor(body, "player")
-	if root and root.has_method("die"):
+	if root == null:
+		return
+	# 优先走血量系统（take_damage）；die() 只作兜底（万一对象没有血量接口）
+	if root.has_method("take_damage"):
+		root.take_damage(HURT_DAMAGE)
+	elif root.has_method("die"):
 		root.die()
 
 

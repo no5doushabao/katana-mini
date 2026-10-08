@@ -302,13 +302,15 @@ func _test_moving_enemy_kills_player() -> void:
 	for i in range(20):
 		await physics_frame
 
-	var died := false
+	# 2026-10-08 改血量制：撞到敌人是**受伤**（扣血），不再是一击必杀。
+	# lambda 改外部变量要用数组包装 —— 项目里的老规矩（GDScript 闭包捕获）。
+	var hurt := [false]
+	p.hp_changed.connect(func(_h: int, _m: int) -> void: hurt[0] = true)
 	for i in range(180):
 		await physics_frame
-		if p.get("_is_dead"):
-			died = true
+		if hurt[0]:
 			break
-	_check(died, "⑨ 敌人走过来碰到玩家 -> 玩家死亡（敌人 x = %.1f，玩家 x = %.1f）" % [e.global_position.x, p.global_position.x])
+	_check(hurt[0], "⑨ 敌人走过来碰到玩家 -> 玩家受伤（敌人 x = %.1f，玩家 x = %.1f）" % [e.global_position.x, p.global_position.x])
 
 	world.queue_free()
 	await physics_frame
@@ -387,14 +389,14 @@ func _test_respawn_grants_invisible_invincibility() -> void:
 	_check(not p.get("_is_dead"), "⑫ 前置：玩家在远处安全")
 
 	p.respawn(Vector2(0, 261))   # 模拟"检查点正好在敌人身上"
-	var deaths := 0
+	# 改血量制后统计"受伤次数"（原来是数死亡次数）。
+	# ⚠️ 信号在 respawn **之后**才连 —— respawn 自己也会发一次 hp_changed，不计入。
+	var hurts := [0]
+	p.hp_changed.connect(func(_h: int, _m: int) -> void: hurts[0] += 1)
 	for i in range(120):
 		await physics_frame
-		if p.get("_is_dead"):
-			deaths += 1
-			p.respawn(Vector2(0, 261))   # 每次死了立刻回来（Main.gd 现在的行为）
 
-	_check(deaths == 1, "⑫ 只靠 entered：站敌人身上 respawn 只判死 %d 次，之后再也不触发（隐形无敌）" % deaths)
+	_check(hurts[0] == 1, "⑫ 只靠 entered：站敌人身上 respawn 只受伤 %d 次，之后再也不触发（隐形无敌）" % hurts[0])
 	_check(not p.get("_is_dead"), "⑫ 玩家此刻活着，而且就站在敌人身体里（危险区已失效）")
 
 	world.queue_free()
@@ -413,14 +415,13 @@ func _test_polling_fixes_invisible_invincibility() -> void:
 		await physics_frame
 
 	p.respawn(Vector2(0, 261))
-	var deaths := 0
+	var hurts := [0]
+	p.hp_changed.connect(func(_h: int, _m: int) -> void: hurts[0] += 1)
 	for i in range(120):
 		await physics_frame
-		if p.get("_is_dead"):
-			deaths += 1
-			p.respawn(Vector2(0, 261))
 
-	_check(deaths >= 3, "⑭ 每帧轮询：站在敌人身上会持续判死（120 帧内 %d 次），没有隐形无敌" % deaths)
+	# 无敌帧 0.6s（36 帧）→ 120 帧内应该受伤 3 次上下
+	_check(hurts[0] >= 3, "⑭ 每帧轮询：站在敌人身上会持续受伤（120 帧内 %d 次），没有隐形无敌" % hurts[0])
 
 	world.queue_free()
 	await physics_frame
@@ -437,41 +438,39 @@ func _test_moving_enemy_death_spiral() -> void:
 	for i in range(20):
 		await physics_frame
 
-	# 检查点设在敌人巡逻路线上（x=0），玩家复活后不动 -> 敌人每次扫过来都会撞死他
+	# 检查点设在敌人巡逻路线上（x=0），玩家复活后不动 -> 敌人每次扫过来都会伤到他。
+	# ⚠️ 2026-10-08 改血量制：这里统计"受伤次数"（原来是死亡次数）。
+	#    语义从"死亡螺旋"变成"持续掉血" —— 仍然是要防的坑，只是不再秒杀。
+	#    ⚠️ 信号只连**一次**，后面按阶段取差值，避免重复连接导致计数翻倍。
+	var hurts := [0]
+	p.hp_changed.connect(func(_h: int, _m: int) -> void: hurts[0] += 1)
+
 	p.respawn(Vector2(0, 261))
-	var deaths := 0
+	var h1: int = hurts[0]
 	for i in range(400):
 		await physics_frame
-		if p.get("_is_dead"):
-			deaths += 1
-			p.respawn(Vector2(0, 261))
-	_check(deaths >= 3, "⑮ 会移动的敌人 + 检查点在它巡逻路线上 -> 400 帧内死了 %d 次（死亡螺旋）" % deaths)
+	_check(hurts[0] - h1 >= 3,
+		"⑮ 会移动的敌人 + 检查点在它巡逻路线上 -> 400 帧内受伤 %d 次（持续掉血）" % (hurts[0] - h1))
 
 	# 对策：Main.gd 在复活瞬间用 set_danger_enabled(false) 给玩家一个"重生保护窗口"
 	e.set_danger_enabled(false)
 	p.respawn(Vector2(0, 261))
-	var deaths_in_grace := 0
+	var h2: int = hurts[0]
 	for i in range(30):
 		await physics_frame
-		if p.get("_is_dead"):
-			deaths_in_grace += 1
-			p.respawn(Vector2(0, 261))
-	_check(deaths_in_grace == 0, "⑮ set_danger_enabled(false) 的重生保护窗口内不再判死（%d 次）" % deaths_in_grace)
+	_check(hurts[0] == h2, "⑮ set_danger_enabled(false) 的重生保护窗口内不再受伤（%d 次）" % (hurts[0] - h2))
 
 	e.set_danger_enabled(true)
 	await physics_frame
 	await physics_frame
 
-	# 兜底：敌人回位 + 玩家回安全点，彻底不再连环死
+	# 兜底：敌人回位 + 玩家回安全点，彻底不再连环受伤
 	e.reset_enemy()
 	p.respawn(Vector2(400, 261))
-	var after := 0
+	var h3: int = hurts[0]
 	for i in range(120):
 		await physics_frame
-		if p.get("_is_dead"):
-			after += 1
-			p.respawn(Vector2(400, 261))
-	_check(after == 0, "⑮ reset_enemy() + 复活到安全点 -> 120 帧内不再死亡（%d 次）" % after)
+	_check(hurts[0] == h3, "⑮ reset_enemy() + 复活到安全点 -> 120 帧内不再受伤（%d 次）" % (hurts[0] - h3))
 
 	world.queue_free()
 	await physics_frame

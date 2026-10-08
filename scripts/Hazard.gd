@@ -26,6 +26,16 @@ const TEX_VISUAL := "res://art/hazard.png"
 @export var warn_time := 0.35           ## 启动前的预警闪烁时长（秒）
 @export var hazard_size := Vector2(18, 18)  ## 危险区尺寸
 
+## 碰到玩家造成的伤害（对应 Player 的 HURT_LARGE 档 = 大伤害）。
+## ⚠️ 比杂兵疼得多是**故意的**：危险物有前摇预警（warn_time），玩家有时间躲 ——
+##    伤害高才配得上"提前给你预警"。
+const HURT_DAMAGE := 6
+
+## true = 每物理帧轮询重叠的玩家（推荐）；false = 只依赖 body_entered。
+## ⭐ 理由和敌人那边一样（§2.6 的老 bug）：body_entered 只在"重叠从无到有"
+##    那一帧发一次，玩家在危险物身上复活时会拿到"隐形无敌"。
+@export var danger_polling := true
+
 # ────────────────────────── 内部状态 ──────────────────────────
 var _origin := Vector2.ZERO
 var _t := 0.0                ## 0~1 的来回进度（三角波）
@@ -103,17 +113,40 @@ func _physics_process(delta: float) -> void:
 	var offset := (_t - 0.5) * travel
 	position = _origin + (Vector2(0, offset) if vertical else Vector2(offset, 0))
 
+	_poll_danger()
+
 
 func _on_body_entered(body: Node2D) -> void:
-	# 延迟一帧，和敌人的判死保持一致（给同帧内的玩家攻击留优先权）
-	_kill_deferred.call_deferred(body)
+	# 延迟一帧，和敌人的判伤保持一致（给同帧内的玩家攻击留优先权）
+	_hit_deferred.call_deferred(body)
 
 
-func _kill_deferred(body: Node2D) -> void:
-	# 向上找组：碰撞体未必就是挂了脚本的那个节点
-	var cur: Node = body
-	while cur != null:
-		if cur.is_in_group("player") and cur.has_method("die"):
-			cur.die()
+## 每物理帧轮询重叠的玩家 —— 兜底判伤（body_entered 管"刚接触"，它管"一直重叠着"）
+func _poll_danger() -> void:
+	if not danger_polling:
+		return
+	for body in get_overlapping_bodies():
+		if body is Node2D and _find_player_root(body) != null:
+			_hit_deferred.call_deferred(body)
 			return
+
+
+## 沿父链向上找玩家根节点（组不会传给子节点，碰撞体未必是挂了脚本的那个节点）
+func _find_player_root(node: Node) -> Node:
+	var cur: Node = node
+	while cur != null:
+		if cur.is_in_group("player"):
+			return cur
 		cur = cur.get_parent()
+	return null
+
+
+func _hit_deferred(body: Node2D) -> void:
+	var root := _find_player_root(body)
+	if root == null:
+		return
+	# 优先走血量系统（take_damage）；die() 只作兜底
+	if root.has_method("take_damage"):
+		root.take_damage(HURT_DAMAGE)
+	elif root.has_method("die"):
+		root.die()
