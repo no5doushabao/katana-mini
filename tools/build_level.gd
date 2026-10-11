@@ -257,25 +257,31 @@ func _build() -> void:
 	bgs.position = Vector2(0, -37)   # 上移 37px：素材草坪表面(476) - 37 = 439 = GROUND_TOP
 	layer.add_child(bgs)
 
-	# ⭐ 2026-10-11 前景草丛：阿包的要求
-	#   「人物的脚陷在草里更合理，但那样的话，脚应该**隐藏在草后面被草挡住**」
-	#   -> 把背景的草地再复制一层放到**玩家上层**（z_index=1 > 玩家的 0），
-	#      玩家的脚就自然被草丛遮住，看起来像"站在及膝草丛里"。
-	#   与背景**同速**（motion_scale=1.0）才不会错位；同样镜像平铺保证无缝。
+	# ⭐ 2026-10-11 前景草丛（第二版）：阿包要求"脚要隐藏在草后面"
+	#
+	# ⚠️ 第一版把它放进 ParallaxBg 里设 z_index=1 —— **完全无效**，草丛被玩家整个盖住。
+	#    根因：**ParallaxBackground 继承自 CanvasLayer**，它和普通节点是两套渲染批次；
+	#    ParallaxBackground 整体先渲染，其内部的 z_index 只对同层有效，
+	#    永远盖不住挂在普通节点上的 Player/Enemies。
+	#    -> 必须把它当**普通节点**放进场景，z_index 才和玩家在同一场竞争。
+	#
+	#    它天然跟随镜头（视差系数 1.0）：把精灵在世界里平铺若干张，
+	#    相机一动，它们就像普通世界物体一样滚动 —— 和平台/敌人完全同速。
 	var fg_tex: Texture2D = load(TEX_FG_GRASS)
-	var fg_layer := ParallaxLayer.new()
-	fg_layer.name = "LayerGrassFG"
-	fg_layer.motion_scale = Vector2(1.0, 1.0)
-	fg_layer.motion_mirroring = Vector2(float(fg_tex.get_width()), 0.0)
-	pb.add_child(fg_layer)
-	var fg := Sprite2D.new()
-	fg.name = "Visual"
-	fg.texture = fg_tex
-	fg.centered = false
-	fg.position = Vector2(0, 449)      # 上沿比脚底(439)低 10px -> 刚好挡住脚
-	fg.z_index = 1                     # ⭐ 高于玩家/敌人(0) = 遮住它们的脚
-	fg_layer.add_child(fg)
-
+	var fg_w := fg_tex.get_width()
+	# 关卡右端（前景草要平铺盖满整个关卡宽度）
+	var level_right := 0.0
+	for gr in GROUNDS:
+		level_right = maxf(level_right, float(gr[1]))
+	var fg_tiles := int(ceil(level_right / float(fg_w)))
+	for i in range(fg_tiles):
+		var fgs := Sprite2D.new()
+		fgs.name = "GrassFG" if i == 0 else "GrassFG%d" % i
+		fgs.texture = fg_tex
+		fgs.centered = false
+		fgs.position = Vector2(i * fg_w, 449)   # 上沿比脚底(439)低 10px -> 刚好挡脚
+		fgs.z_index = 1                          # 高于玩家/敌人(0) = 遮住它们的脚
+		scene.add_child(fgs)
 	# ⚠️ 2026-10-11：**不再铺地板条**。
 	#   阿包的判断：「人物要站在背景的草坪上」——而背景草地线本来就落在 GROUND_TOP 附近，
 	#   再叠一条草地条反而把它盖住，人物就像"站在一块贴图上"而不是"站在森林地上"。
