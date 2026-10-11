@@ -279,7 +279,7 @@ func _build() -> void:
 		fgs.name = "GrassFG" if i == 0 else "GrassFG%d" % i
 		fgs.texture = fg_tex
 		fgs.centered = false
-		fgs.position = Vector2(i * fg_w, 449)   # 上沿比脚底(439)低 10px -> 刚好挡脚
+		fgs.position = Vector2(i * fg_w, 439)   # 上沿 = 脚底(GROUND_TOP)：只遮站在地面上时的脚
 		fgs.z_index = 1                          # 高于玩家/敌人(0) = 遮住它们的脚
 		scene.add_child(fgs)
 	# ⚠️ 2026-10-11：**不再铺地板条**。

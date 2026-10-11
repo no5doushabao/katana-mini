@@ -41,6 +41,22 @@ var kills := 0                ## 击杀数
 @onready var help_text: Label = get_node_or_null("HUD/HelpText") as Label  ## 底部：操作提示
 @onready var elem_icon: TextureRect = get_node_or_null("HUD/ElemIcon") as TextureRect  ## 右上：当前元素图标
 
+# ⚠️ 与 tools/build_level.gd 的 GROUND_TOP 必须保持一致（两处都改！）。
+#    这里是**运行时**脚本，生成器是**编辑器期**脚本，没法直接共享常量，
+#    所以各留一份。改地面高度时两处都要跟着改。
+const GROUND_TOP := 439.0
+
+# ── 前景草丛的"是否遮挡"判定（2026-10-11）──
+#
+# 阿包的要求：站在地面上时脚要**藏在草丛后面**，但**跳上平台后不能被草挡**。
+# 「一条横贯全屏的草带」做不到这件事 —— 它只看 y，分不清"你站在地面还是平台"。
+# 所以按玩家的 y 动态切换草的层级：
+#   · 玩家脚在地面附近  -> 草 z_index=1（画在玩家前面 = 遮住脚）
+#   · 玩家跳到平台上    -> 草 z_index=-1（画在玩家后面 = 鞋子露出来）
+# ⚠️ 判定要用"脚底所在高度"近似：玩家节点中心 = 脚底 -（碰撞盒半高）。
+const FOOT_TO_CENTER := 15.0     ## 玩家碰撞盒半高（脚底到中心）
+const GRASS_OCCLUDE_MARGIN := 4.0 ## 容差：玩家中心高于 (GROUND_TOP-FOOT_TO_CENTER) 这个量就认为"不在地面"
+
 var _respawn_timer := -1.0
 
 
@@ -124,9 +140,27 @@ func _reset_enemies_after(pos: Vector2) -> void:
 				e.reset_enemy()
 
 
+## 前景草丛的遮挡开关（见文件上方 FOOT_TO_CENTER 的注释）
+##
+## 「一条横贯全屏的草带」无法同时满足两件事：
+##   站地面 -> 要遮脚； 站平台（更高）-> 不能遮。
+## 因为它只看 y 坐标，不知道玩家在哪。所以这里按玩家的实际高度**动态换层**。
+func _update_grass_occlusion() -> void:
+	if player == null:
+		return
+	# 脚底 = 玩家中心 + 碰撞盒半高；站在地面时脚底 == GROUND_TOP
+	var foot: float = player.global_position.y + FOOT_TO_CENTER
+	var on_ground: bool = foot >= (GROUND_TOP - GRASS_OCCLUDE_MARGIN)
+	var want_z: int = 1 if on_ground else -1
+	for ch in get_children():
+		if ch is Sprite2D and (ch as Sprite2D).name.begins_with("GrassFG"):
+			(ch as Sprite2D).z_index = want_z
+
+
 func _process(delta: float) -> void:
 	# 子弹时间能量条（每帧刷新，玩家脚本会读取它）
 	_update_slow_bar()
+	_update_grass_occlusion()
 
 	if Input.is_action_just_pressed("restart"):
 		_restart_level()
