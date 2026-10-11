@@ -60,7 +60,14 @@ func _run() -> void:
 		else:
 			oks.append("检查了 %d 块地形：贴图已加载、region 在范围内、缩放为 1、碰撞盒一致" % checked)
 
-	# 背景三层也要能加载（否则画面会是纯色，也就是"太空旷"的老问题）
+	# 背景要能加载（否则画面会是纯色，也就是"太空旷"的老问题）
+	#
+	# ⚠️ 2026-10-11 变更：背景从「三层视差（bg_sky/hills/trees）」改成
+	#    「单张无缝森林图（forest_bg）+ 一层静态草地地板（forest_floor）」。
+	#    原因：新素材本身就是一张有纵深的完整森林画，切三层反而破坏它。
+	#    -> 所以这里不再断言"层数 >= 3"（那是旧方案的形状），
+	#       改成断言「至少一层有贴图」+「地板存在且贴图已加载」。
+	#    仍然守住原意：**画面不能是纯色/空旷**。
 	var pb := scene.get_node_or_null("ParallaxBg")
 	if pb == null:
 		fails.append("★ 找不到 ParallaxBg（没有视差背景）")
@@ -74,10 +81,20 @@ func _run() -> void:
 				fails.append("★ 视差层 %s 没有贴图" % child.name)
 			else:
 				layers += 1
-		if layers >= 3:
-			oks.append("视差背景 %d 层全部有贴图" % layers)
-		elif layers > 0:
-			fails.append("视差层只有 %d 层有贴图（期望 3 层）" % layers)
+		if layers >= 1:
+			oks.append("视差背景 %d 层有贴图" % layers)
+		else:
+			fails.append("★ 视差背景一层贴图都没有（画面会是纯色）")
+
+	# 地板：静态草地（顶边必须与物理地面 GROUND_TOP=480 对齐，否则视觉地面≠物理地面）
+	var floor_sp := scene.get_node_or_null("Floor") as Sprite2D
+	if floor_sp == null:
+		fails.append("★ 找不到 Floor（静态地板）")
+	elif floor_sp.texture == null:
+		fails.append("★ Floor 没有贴图")
+	else:
+		oks.append("地板存在：贴图 %dx%d @ y=%.0f" % [
+			floor_sp.texture.get_width(), floor_sp.texture.get_height(), floor_sp.position.y])
 
 	# ── "能杀人的东西必须有可见视觉"（2026-10-07 用户报的 bug）──
 	#

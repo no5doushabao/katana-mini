@@ -32,6 +32,12 @@ const TEX_ENEMY_SHEET := "res://art/enemy_sheet.png"
 const TEX_BG_SKY := "res://art/kenney/bg_sky.png"
 const TEX_BG_HILLS := "res://art/kenney/bg_hills.png"
 const TEX_BG_TREES := "res://art/kenney/bg_trees.png"
+# ⭐ 2026-10-11：换成「幽暗森林」素材（edermunizz / Free Pixel Art Forest，CC-BY 类授权）
+#   两张图都是**镜像平铺**出来的无缝图（原图 928 宽 + 左右翻转 = 1856），
+#   所以接缝在数学上不存在；配合 Sprite2D region + motion_mirroring 循环。
+#   ⚠️ 素材文件禁止转发 -> 已在 .gitignore 排除 art/forest/
+const TEX_BG_FOREST := "res://art/forest/forest_bg.png"       # 1856x540
+const TEX_FLOOR_FOREST := "res://art/forest/forest_floor.png" # 1856x40（地板条）
 const TEX_HAZARD := "res://art/hazard.png"     # 移动危险物的视觉（tools/gen_hazard_sprite.py 生成）
 
 # ─────────────── 地图数据（改这里就是改关卡）───────────────
@@ -169,6 +175,19 @@ func _enemy_visual(parent: Node) -> void:
 	parent.add_child(sp)
 
 
+## ⭐ 静态单图（不随镜头滚动）—— 用于「地板」这类必须固定在世界里的元素。
+## 2026-10-11：幽暗森林方案里，地板不再用重复图块拼，而是直接铺一条无缝草地。
+func _singleton(parent: Node, tex_path: String, y: float, z: int) -> Sprite2D:
+	var sp := Sprite2D.new()
+	sp.name = "Floor"
+	sp.texture = load(tex_path)
+	sp.centered = false
+	sp.position = Vector2(0, y)
+	sp.z_index = z
+	parent.add_child(sp)
+	return sp
+
+
 # ─────────────────────── 主流程 ───────────────────────
 
 func _build() -> void:
@@ -188,14 +207,31 @@ func _build() -> void:
 		if n:
 			n.free()
 
-	# ═══ 1. 三层视差背景 ═══
+	# ═══ 1. 背景：幽暗森林（单张无缝图做视差 + 静态草地地板）═══
+	#   为什么从"三层"改成"一层"：新素材本身就是一张完整的有纵深感的森林画，
+	#   再切三层反而会破坏它；而"循环无缝"这件事由镜像平铺解决（见 TEX_BG_FOREST 注释）。
 	var pb := ParallaxBackground.new()
 	pb.name = "ParallaxBg"
 	scene.add_child(pb)
 	scene.move_child(pb, 0)
-	_backdrop(pb, TEX_BG_SKY,   -30, 0.10, 0.0)
-	_backdrop(pb, TEX_BG_HILLS, -20, 0.30, 120.0)
-	_backdrop(pb, TEX_BG_TREES, -10, 0.55, 0.0)
+
+	var forest_tex: Texture2D = load(TEX_BG_FOREST)
+	var fw := forest_tex.get_width()
+	var layer := ParallaxLayer.new()
+	layer.name = "LayerForest"
+	layer.motion_scale = Vector2(0.35, 1.0)              # 慢速横移，做出"远景"感
+	# 单张 1856 宽 = 原图 928 + 镜像 928 -> 循环一次正好接回自身，接缝为零
+	layer.motion_mirroring = Vector2(float(fw), 0.0)
+	pb.add_child(layer)
+	var bgs := Sprite2D.new()
+	bgs.name = "Visual"
+	bgs.texture = forest_tex
+	bgs.centered = false
+	bgs.position = Vector2.ZERO
+	layer.add_child(bgs)
+
+	# 地板：静态（不随镜头滚），顶边与 GROUND_TOP 对齐 —— 视觉地面 = 物理地面
+	_singleton(scene, TEX_FLOOR_FOREST, GROUND_TOP, -5)
 
 	# ═══ 2. 地形 ═══
 	var solids := Node2D.new()

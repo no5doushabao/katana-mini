@@ -19,3 +19,12 @@ desktop.ini
 # ── 临时文件 ──
 *.tmp
 *.bak
+
+# ── 第三方素材（禁止转发）──
+# art/forest/ 里的背景来自 edermunizz "Free Pixel Art Forest"。
+# 作者 license.txt 第 4 条：可以个人/商用、可以修改、**必须署名**，
+# 但 "You can NOT re-distribute the files, no matter how much you modify it"
+#   -> 素材 PNG **不能进这个 public 仓库**（那等于转发素材文件）。
+# 所以本地开发照常用，提交时排除；将来发版也要单独确认分发口径。
+# 出处：https://edermunizz.itch.io/free-pixel-art-forest
+art/forest/
