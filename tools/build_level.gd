@@ -230,8 +230,25 @@ func _build() -> void:
 	bgs.position = Vector2.ZERO
 	layer.add_child(bgs)
 
-	# 地板：静态（不随镜头滚），顶边与 GROUND_TOP 对齐 —— 视觉地面 = 物理地面
-	_singleton(scene, TEX_FLOOR_FOREST, GROUND_TOP, -5)
+	# 地板：静态铺满**整个关卡宽度**（不随镜头滚动）——
+	#   ⚠️ 第一版只放了一张（宽 1856），而关卡横跨 2880 -> 相机走到右边就露出空白底。
+	#   所以这里按地板图宽度**平铺若干张**盖住 0..关卡右端。
+	#   贴图本身已镜像无缝，相邻两张首尾像素相同 -> 接缝为零。
+	var floor_tex: Texture2D = load(TEX_FLOOR_FOREST)
+	var fw_floor := floor_tex.get_width()
+	var level_right := 0.0
+	for g in GROUNDS:
+		level_right = maxf(level_right, float(g[1]))
+	var tiles := int(ceil(level_right / float(fw_floor)))
+	for i in range(tiles):
+		var fl := Sprite2D.new()
+		fl.name = "Floor" if i == 0 else "Floor%d" % i
+		fl.texture = floor_tex
+		fl.centered = false
+		# y 用 GROUND_TOP：地板**顶边**与物理地面**顶边**严格重合（不然玩家会像悬空）
+		fl.position = Vector2(i * fw_floor, GROUND_TOP)
+		fl.z_index = -5
+		scene.add_child(fl)
 
 	# ═══ 2. 地形 ═══
 	var solids := Node2D.new()

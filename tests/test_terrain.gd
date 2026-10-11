@@ -87,14 +87,30 @@ func _run() -> void:
 			fails.append("★ 视差背景一层贴图都没有（画面会是纯色）")
 
 	# 地板：静态草地（顶边必须与物理地面 GROUND_TOP=480 对齐，否则视觉地面≠物理地面）
-	var floor_sp := scene.get_node_or_null("Floor") as Sprite2D
-	if floor_sp == null:
-		fails.append("★ 找不到 Floor（静态地板）")
-	elif floor_sp.texture == null:
-		fails.append("★ Floor 没有贴图")
+	# ⚠️ 2026-10-11：地板改成**按关卡宽度平铺多张**（原来只放一张，相机走到右边会露空白底），
+	#    所以这里遍历所有 Floor* 而不是只取一张。
+	var floors: Array = []
+	for ch in scene.get_children():
+		if ch is Sprite2D and ch.name.begins_with("Floor"):
+			floors.append(ch)
+	if floors.is_empty():
+		fails.append("★ 找不到地板（Floor）")
 	else:
-		oks.append("地板存在：贴图 %dx%d @ y=%.0f" % [
-			floor_sp.texture.get_width(), floor_sp.texture.get_height(), floor_sp.position.y])
+		var bad := 0
+		var covered := 0.0
+		for fl in floors:
+			if fl.texture == null:
+				bad += 1
+			else:
+				covered += float(fl.texture.get_width())
+		var f0: Sprite2D = floors[0]
+		oks.append("地板 %d 张（总覆盖 %.0f px）：贴图 %dx%d @ y=%.0f" % [
+			floors.size(), covered, f0.texture.get_width(), f0.texture.get_height(), f0.position.y])
+		if bad > 0:
+			fails.append("★ 有 %d 张地板没有贴图" % bad)
+		# 必须盖住整个关卡宽度，否则相机走到右侧会露出空白底
+		if covered < 2880.0:
+			fails.append("★ 地板总宽 %.0f < 关卡宽 2880（相机走到右边会露空白）" % covered)
 
 	# ── "能杀人的东西必须有可见视觉"（2026-10-07 用户报的 bug）──
 	#
