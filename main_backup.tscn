@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scripts/Player.gd" id="2_player"]
 [ext_resource type="Script" path="res://scripts/Enemy.gd" id="3_enemy"]
 [ext_resource type="Script" path="res://scripts/PatrolEnemy.gd" id="4_patrol_enemy"]
-[ext_resource type="Texture2D" path="res://art/player_sheet.png" id="5_player_sheet"]
+[ext_resource type="Texture2D" path="res://art/player_hero.png" id="5_player_sheet"]
 [ext_resource type="Texture2D" path="res://art/enemy_sheet.png" id="6_enemy_sheet"]
 [ext_resource type="Texture2D" path="res://art/kenney/terrain_ground.png" id="7_ground_tex"]
 [ext_resource type="Texture2D" path="res://art/kenney/terrain_plat_a.png" id="8_plat_a_tex"]
@@ -144,7 +144,7 @@ shape = SubResource("ShapePlayer")
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("5_player_sheet")
 region_enabled = true
-region_rect = Rect2(0, 0, 24, 24)
+region_rect = Rect2(0, 0, 38, 43)
 
 [node name="AttackArea" type="Area2D" parent="Player"]
 position = Vector2(33, 0)

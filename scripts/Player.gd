@@ -38,17 +38,26 @@ const ATTACK_COOLDOWN := 0.26     ## 攻击冷却
 const ATTACK_ACTIVE := 0.10       ## 攻击判定框存在时长
 const ATTACK_RANGE := Vector2(52.0, 34.0)  ## 判定框尺寸
 
-# ── 精灵图帧索引（player_sheet.png 是 5 列 x 2 行，每帧 24x24）──
-# 素材来源：Kenney "Pixel Platformer"（CC0），角色 tile_0009。
-# 原图是**静态单帧**，动作用像素位移生成（见 art/kenney/ 与生成脚本）。
-# 改精灵图后，这里和 main.tscn 的 region_rect 都要同步。
-const FR_IDLE := [0, 1]        ## 待机 2 帧（上浮呼吸）
-const FR_RUN := [2, 3, 4, 5]   ## 跑动 4 帧（左右倾 + 上浮）
-const FR_JUMP := 6             ## 起跳
-const FR_FALL := 7             ## 下落
-const FR_ATTACK := [8, 9]      ## 挥刀 2 帧（蓄力 + 前冲）
-const SHEET_COLS := 5          ## 精灵图列数（算 region_rect 用）
-const SPRITE_SIZE := 24        ## 单帧像素尺寸（Kenney 图块是 24x24）
+# ── 精灵图帧索引（player_hero.png 是 24 列 x 2 行，每帧 38x43）──
+# ⭐ 2026-10-11 换主角：阿包下载的免费素材（idle 10 帧 + walk 24 帧，侧面视图）
+#   旧素材是 Kenney "Pixel Platformer" 的**正面视图单帧**，靠像素位移假装动画，
+#   且方向是错的（sprite.flip_h = facing > 0，注释里写着"换素材时改回 < 0"）。
+#   新素材是**侧面视图 + 真逐帧**，方向天然正确 -> 见 _update_sprite 里的翻转处理。
+#
+#   帧序（见 gen 脚本 _probe/make-hero-sheet2.py）：
+#     0-9   idle  10 帧   10-33 walk 24 帧   34-39 旧素材缩放进来的备用帧
+#   ⚠️ 改精灵图后，这里和 main.tscn 的 region_rect、以及 tools/build_level.gd
+#      里的玩家 Visual 都要同步。
+const FR_IDLE := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]      ## 待机 10 帧（新素材）
+const FR_RUN := [10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+				20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+				30, 31, 32, 33]                        ## 跑动 24 帧（新素材 walk）
+const FR_JUMP := 34            ## 起跳（旧素材帧，新素材没有 jump）
+const FR_FALL := 35            ## 下落（旧素材帧）
+const FR_ATTACK := [36, 37]    ## 挥刀 2 帧（旧素材帧；新素材没有 attack）
+const SHEET_COLS := 24         ## 精灵图列数（算 region_rect 用）
+const SPRITE_SIZE := 38        ## 单帧宽
+const SPRITE_H := 43           ## 单帧高（⚠️ 非正方形，region_rect 要用它）
 
 const RUN_FPS := 12.0          ## 跑动动画速度（帧/秒）
 const IDLE_FPS := 4.0          ## 待机动画速度（慢一点，像在呼吸）
@@ -636,23 +645,18 @@ func _update_sprite(delta: float) -> void:
 		_anim_time += delta
 		frame = FR_IDLE[int(_anim_time * fps) % FR_IDLE.size()]
 
-	# 精灵图是 5 列网格，按索引反算它在第几行第几列
+	# 精灵图是 SHEET_COLS 列的网格，按索引反算它在第几行第几列
+	# ⚠️ 帧是 38x43（**非正方形**），region 的高要用 SPRITE_H —— 曾经写死 SPRITE_SIZE
+	#    会让每帧往下多切 5px，看起来像"角色在往上飘"。
 	sprite.region_rect = Rect2(
 		(frame % SHEET_COLS) * SPRITE_SIZE,
-		(frame / SHEET_COLS) * SPRITE_SIZE,
-		SPRITE_SIZE, SPRITE_SIZE)
+		(frame / SHEET_COLS) * SPRITE_H,
+		SPRITE_SIZE, SPRITE_H)
 
-	# ⚠️ 这里的翻转方向是"反"的，而且是有意的 —— 用户反馈过"主角在倒车"。
-	#
-	# 根因：Kenney `Pixel Platformer` 的角色是**正面视图**（脸朝镜头、左右对称），
-	#       它根本没有"朝左/朝右"的区分。无脑镜像会让人觉得"转过身去/倒着走"。
-	#       横版动作游戏应该用**侧面视图**的素材。
-	#
-	# 权宜之计：把翻转反过来，让"看起来的朝向"和按键方向一致。
-	# 根治方案：换侧面视图素材（`new-platformer` 包已在
-	# `Kenney New Platformer`，有 idle/walk/jump 完整 9 帧 + XML 图集坐标）。
-	# 换素材时**这一行要改回 `facing < 0`**。
-	sprite.flip_h = facing > 0
+	# ⭐ 2026-10-11 换主角后**改回正确方向**（注释里早就写明了这一步）。
+	# 旧素材（Kenney）是**正面视图**、无左右之分，所以当初把翻转反着写来"骗眼睛"；
+	# 新素材是**侧面视图**：精灵图里角色朝**右** -> 朝左时才翻转。
+	sprite.flip_h = facing < 0
 
 
 ## 攻击范围的可视化：一道小月牙（斩击弧光）
