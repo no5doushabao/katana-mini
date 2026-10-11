@@ -100,31 +100,30 @@ func _run() -> void:
 		else:
 			fails.append("★ 视差背景一层贴图都没有（画面会是纯色）")
 
-	# 地板：静态草地（顶边必须与物理地面 GROUND_TOP=480 对齐，否则视觉地面≠物理地面）
-	# ⚠️ 2026-10-11：地板改成**按关卡宽度平铺多张**（原来只放一张，相机走到右边会露空白底），
-	#    所以这里遍历所有 Floor* 而不是只取一张。
-	var floors: Array = []
-	for ch in scene.get_children():
-		if ch is Sprite2D and ch.name.begins_with("Floor"):
-			floors.append(ch)
-	if floors.is_empty():
-		fails.append("★ 找不到地板（Floor）")
+	# 地面与背景的对齐（阿包 2026-10-11 的要求：「人物要站在背景的草坪上」）
+	#
+	# ⚠️ 历史（别再重犯）：地板这层加过三次又删过三次 ——
+	#    kenney 图块拼 -> 无缝草地条 -> 半透明 45% -> **全部去掉**。
+	#    最终结论：**地面视觉完全交给背景**（背景草地线本来就落在 GROUND_TOP 附近），
+	#    另叠一层只会把背景盖住，人物看起来像"站在一块贴图上"。
+	#    所以这里断言的是：① 地面碰撞体存在（玩家站得住）② 背景视觉层存在（不是纯色）。
+	var ground_top_calc := -1.0
+	var solids2 := scene.get_node_or_null("Solids")
+	if solids2 == null:
+		fails.append("★ 找不到 Solids（没有地形）")
 	else:
-		var bad := 0
-		var covered := 0.0
-		for fl in floors:
-			if fl.texture == null:
-				bad += 1
-			else:
-				covered += float(fl.texture.get_width())
-		var f0: Sprite2D = floors[0]
-		oks.append("地板 %d 张（总覆盖 %.0f px）：贴图 %dx%d @ y=%.0f" % [
-			floors.size(), covered, f0.texture.get_width(), f0.texture.get_height(), f0.position.y])
-		if bad > 0:
-			fails.append("★ 有 %d 张地板没有贴图" % bad)
-		# 必须盖住整个关卡宽度，否则相机走到右侧会露出空白底
-		if covered < 2880.0:
-			fails.append("★ 地板总宽 %.0f < 关卡宽 2880（相机走到右边会露空白）" % covered)
+		var gcount := 0
+		for ch in solids2.get_children():
+			if ch is StaticBody2D and (ch as StaticBody2D).name.begins_with("Ground"):
+				gcount += 1
+				if ground_top_calc < 0.0:
+					var shp := ch.get_node_or_null("Shape") as CollisionShape2D
+					if shp and shp.shape is RectangleShape2D:
+						ground_top_calc = ch.global_position.y - (shp.shape as RectangleShape2D).size.y * 0.5
+		if gcount == 0:
+			fails.append("★ 一段地面碰撞体都没有（玩家会掉下去）")
+		else:
+			oks.append("地面碰撞体 %d 段，顶部 y=%.0f（= 玩家站立基准）" % [gcount, ground_top_calc])
 
 	# ── "能杀人的东西必须有可见视觉"（2026-10-07 用户报的 bug）──
 	#

@@ -58,8 +58,21 @@ func _run() -> void:
 	root.add_child(scene)
 	var p: CharacterBody2D = scene.get_node("Player") as CharacterBody2D
 
+	# ⚠️ 2026-10-11：地面顶部**从场景读**，不再硬编码
+	#    （曾经写死 480，后来生成器把 GROUND_TOP 改成 439，这里没跟着改 ->
+	#      4 个平台全被判成"不可达"、4 个敌人全被判成"没贴地"，白报 8 个假失败）
+	#    算法：地面碰撞盒中心 + 半高 = 地面顶部；玩家碰撞盒半高 15 -> 站姿中心 = 顶部 - 15
 	var ground_top: float = 480.0
-	var stand_y: float = ground_top - 15.0
+	var stand_half := 15.0
+	var solids_pre := scene.get_node_or_null("Solids")
+	if solids_pre:
+		for ch in solids_pre.get_children():
+			if ch is StaticBody2D and (ch as StaticBody2D).name.begins_with("Ground"):
+				var shp := ch.get_node_or_null("Shape") as CollisionShape2D
+				if shp and shp.shape is RectangleShape2D:
+					ground_top = ch.global_position.y - (shp.shape as RectangleShape2D).size.y * 0.5
+					break
+	var stand_y: float = ground_top - stand_half
 
 	var fails: Array[String] = []
 	var oks: Array[String] = []
