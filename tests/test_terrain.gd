@@ -28,12 +28,24 @@ func _run() -> void:
 		fails.append("找不到 Solids 节点")
 	else:
 		var checked := 0
+		var grounds := 0
 		for child in solids.get_children():
 			var body := child as StaticBody2D
 			if body == null:
 				continue
+			# ⚠️ 2026-10-11：地面（Ground*）现在**故意不带视觉** ——
+			#    它的视觉由静态草地条 Floor 承担（否则 Kenney 草皮上的凸起会露出来）。
+			#    这类节点只要求"有碰撞体"，其余地形（平台）仍要求"视觉+碰撞一致"。
+			var is_ground: bool = body.name.begins_with("Ground")
 			var sp := body.get_node_or_null("Visual") as Sprite2D
 			if sp == null:
+				if is_ground:
+					var csg := body.get_node_or_null("Shape") as CollisionShape2D
+					if csg == null or csg.shape == null:
+						fails.append("★ %s 是地面但没有碰撞体" % body.name)
+					else:
+						grounds += 1
+					continue
 				fails.append("%s 的 Visual 不是 Sprite2D" % body.name)
 				continue
 			if sp.texture == null:
@@ -58,7 +70,9 @@ func _run() -> void:
 		if checked == 0:
 			fails.append("★ Solids 下一个带贴图的地形都没有")
 		else:
-			oks.append("检查了 %d 块地形：贴图已加载、region 在范围内、缩放为 1、碰撞盒一致" % checked)
+			oks.append("检查了 %d 块地形 + %d 段地面（仅碰撞）：贴图已加载、region 在范围内、缩放为 1、碰撞盒一致" % [checked, grounds])
+			if grounds == 0:
+				fails.append("★ 一段地面都没有（地面碰撞体丢失 → 玩家会掉下去）")
 
 	# 背景要能加载（否则画面会是纯色，也就是"太空旷"的老问题）
 	#

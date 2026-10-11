@@ -102,7 +102,13 @@ func _own(node: Node, owner_node: Node) -> void:
 ## 造一块实心地形：StaticBody2D(碰撞) + Sprite2D(视觉，用 region 裁切)
 ##
 ## 纹理只引用磁盘 PNG，按需裁切 region —— 场景里不会嵌入像素数据。
-func _solid(parent: Node, name: String, cx: float, cy: float, w: float, h: float, tex_path: String) -> void:
+## ⭐ 2026-10-11 加 `visual` 参数：
+##   地面（Ground*）现在把**视觉交给静态草地条 Floor**（见 _build 里的平铺），
+##   所以这里只要碰撞体 -> 传 visual=false。
+##   ⚠️ 一个坑：**不要"既留地形贴图又盖草地"** —— 两层都在 y=480..520，
+##      地形那张的草皮上有两个棕色凸起（阿包称之为"地板上的小人头"），
+##      只要它还在画，就一定会从草地缝隙里露出来。
+func _solid(parent: Node, name: String, cx: float, cy: float, w: float, h: float, tex_path: String, visual: bool = true) -> void:
 	var body := StaticBody2D.new()
 	body.name = name
 	body.position = Vector2(cx, cy)
@@ -116,6 +122,9 @@ func _solid(parent: Node, name: String, cx: float, cy: float, w: float, h: float
 	rect.size = Vector2(w, h)
 	cs.shape = rect
 	body.add_child(cs)
+
+	if not visual:
+		return
 
 	var sp := Sprite2D.new()
 	sp.name = "Visual"
@@ -258,7 +267,9 @@ func _build() -> void:
 	for i in range(GROUNDS.size()):
 		var g: Array = GROUNDS[i]
 		var w: float = g[1] - g[0]
-		_solid(solids, "Ground%d" % i, g[0] + w * 0.5, GROUND_TOP + 20.0, w, 40.0, TEX_GROUND)
+		# 地面只造碰撞体（visual=false）：**视觉由静态草地条 Floor 承担**
+		# （否则 Kenney 草皮上那两个棕色凸起会从草地缝里露出来 = "地板上的小人头"）
+		_solid(solids, "Ground%d" % i, g[0] + w * 0.5, GROUND_TOP + 20.0, w, 40.0, TEX_GROUND, false)
 
 	for i in range(PLATFORMS.size()):
 		var p: Array = PLATFORMS[i]
