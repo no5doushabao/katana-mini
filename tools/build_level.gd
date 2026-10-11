@@ -240,7 +240,11 @@ func _build() -> void:
 	var fw := forest_tex.get_width()
 	var layer := ParallaxLayer.new()
 	layer.name = "LayerForest"
-	layer.motion_scale = Vector2(0.35, 1.0)              # 慢速横移，做出"远景"感
+	# ⭐ 2026-10-11 阿包拍板：「**这速度应该是一样的**」
+	#    -> motion_scale = (1.0, 1.0)：背景与平台/敌人**同速**，不再做视差远景。
+	#    （原先 0.35 是我自作主张加的视差效果；他要的是"森林就是同一个世界"，
+	#      背景慢下来反而显得背景被挂在很远的后面 —— 与"站在草坪上"的目标冲突。）
+	layer.motion_scale = Vector2(1.0, 1.0)               # 与前景同速（不做视差）
 	# 单张 1856 宽 = 原图 928 + 镜像 928 -> 循环一次正好接回自身，接缝为零
 	layer.motion_mirroring = Vector2(float(fw), 0.0)
 	pb.add_child(layer)

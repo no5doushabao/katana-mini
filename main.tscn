@@ -100,327 +100,326 @@ border_width_right = 2
 border_width_bottom = 2
 border_color = Color(0.62, 0.62, 0.7, 1)
 
-[node name="Main" type="Node2D" unique_id=106841275]
+[node name="Main" type="Node2D" unique_id=1825606778]
 script = ExtResource("1_ycdy4")
 
-[node name="ParallaxBg" type="ParallaxBackground" parent="." unique_id=452690590]
+[node name="ParallaxBg" type="ParallaxBackground" parent="." unique_id=827291375]
 
-[node name="LayerForest" type="ParallaxLayer" parent="ParallaxBg" unique_id=600027808]
-motion_scale = Vector2(0.35, 1)
+[node name="LayerForest" type="ParallaxLayer" parent="ParallaxBg" unique_id=1549425957]
 motion_mirroring = Vector2(1856, 0)
 
-[node name="Visual" type="Sprite2D" parent="ParallaxBg/LayerForest" unique_id=210986820]
+[node name="Visual" type="Sprite2D" parent="ParallaxBg/LayerForest" unique_id=1899763226]
 position = Vector2(0, -37)
 texture = ExtResource("2_w48qg")
 centered = false
 
-[node name="Player" type="CharacterBody2D" parent="." unique_id=2113712579]
+[node name="Player" type="CharacterBody2D" parent="." unique_id=413277497]
 position = Vector2(120, 400)
 collision_layer = 2
 script = ExtResource("3_vivmo")
 
-[node name="Shape" type="CollisionShape2D" parent="Player" unique_id=1946975023]
+[node name="Shape" type="CollisionShape2D" parent="Player" unique_id=510722971]
 shape = SubResource("ShapePlayer")
 
-[node name="Visual" type="Sprite2D" parent="Player" unique_id=521300503]
+[node name="Visual" type="Sprite2D" parent="Player" unique_id=368955596]
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("4_2cqfq")
 region_enabled = true
 region_rect = Rect2(0, 0, 24, 24)
 
-[node name="AttackArea" type="Area2D" parent="Player" unique_id=1685886190]
+[node name="AttackArea" type="Area2D" parent="Player" unique_id=1286543917]
 position = Vector2(33, 0)
 collision_layer = 0
 collision_mask = 4
 monitoring = false
 
-[node name="Shape" type="CollisionShape2D" parent="Player/AttackArea" unique_id=519127630]
+[node name="Shape" type="CollisionShape2D" parent="Player/AttackArea" unique_id=1129484419]
 shape = SubResource("ShapeAttack")
 
-[node name="Camera2D" type="Camera2D" parent="Player" unique_id=1057108822]
+[node name="Camera2D" type="Camera2D" parent="Player" unique_id=1473953603]
 
-[node name="Solids" type="Node2D" parent="." unique_id=553325947]
+[node name="Solids" type="Node2D" parent="." unique_id=19887422]
 
-[node name="Ground0" type="StaticBody2D" parent="Solids" unique_id=845214053]
+[node name="Ground0" type="StaticBody2D" parent="Solids" unique_id=716433597]
 position = Vector2(480, 459)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Ground0" unique_id=1540409322]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Ground0" unique_id=883140480]
 shape = SubResource("RectangleShape2D_lswn8")
 
-[node name="Ground1" type="StaticBody2D" parent="Solids" unique_id=1407531351]
+[node name="Ground1" type="StaticBody2D" parent="Solids" unique_id=842176433]
 position = Vector2(1025, 459)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Ground1" unique_id=1123230704]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Ground1" unique_id=212809546]
 shape = SubResource("RectangleShape2D_a6jrf")
 
-[node name="Ground2" type="StaticBody2D" parent="Solids" unique_id=387945071]
+[node name="Ground2" type="StaticBody2D" parent="Solids" unique_id=1059714483]
 position = Vector2(1560, 459)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Ground2" unique_id=833931107]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Ground2" unique_id=345679473]
 shape = SubResource("RectangleShape2D_xuqvo")
 
-[node name="Ground3" type="StaticBody2D" parent="Solids" unique_id=407429532]
+[node name="Ground3" type="StaticBody2D" parent="Solids" unique_id=1063826011]
 position = Vector2(2400, 459)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Ground3" unique_id=126760620]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Ground3" unique_id=1237472648]
 shape = SubResource("RectangleShape2D_qsp4k")
 
-[node name="Platform0" type="StaticBody2D" parent="Solids" unique_id=2031205265]
+[node name="Platform0" type="StaticBody2D" parent="Solids" unique_id=1789083507]
 position = Vector2(620, 399)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Platform0" unique_id=716079023]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Platform0" unique_id=1260269201]
 shape = SubResource("RectangleShape2D_kq58d")
 
-[node name="Visual" type="Sprite2D" parent="Solids/Platform0" unique_id=1735739161]
+[node name="Visual" type="Sprite2D" parent="Solids/Platform0" unique_id=466678295]
 texture = ExtResource("5_yaehf")
 region_enabled = true
 region_rect = Rect2(0, 0, 180, 22)
 
-[node name="Platform1" type="StaticBody2D" parent="Solids" unique_id=932200217]
+[node name="Platform1" type="StaticBody2D" parent="Solids" unique_id=512394076]
 position = Vector2(1800, 399)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Platform1" unique_id=608952695]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Platform1" unique_id=1795101987]
 shape = SubResource("RectangleShape2D_seu75")
 
-[node name="Visual" type="Sprite2D" parent="Solids/Platform1" unique_id=818384128]
+[node name="Visual" type="Sprite2D" parent="Solids/Platform1" unique_id=276283372]
 texture = ExtResource("5_yaehf")
 region_enabled = true
 region_rect = Rect2(0, 0, 160, 22)
 
-[node name="Platform2" type="StaticBody2D" parent="Solids" unique_id=649738009]
+[node name="Platform2" type="StaticBody2D" parent="Solids" unique_id=783693564]
 position = Vector2(2150, 394)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Platform2" unique_id=1568721362]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Platform2" unique_id=2122201306]
 shape = SubResource("RectangleShape2D_htxhm")
 
-[node name="Visual" type="Sprite2D" parent="Solids/Platform2" unique_id=325911076]
+[node name="Visual" type="Sprite2D" parent="Solids/Platform2" unique_id=1958828592]
 texture = ExtResource("5_yaehf")
 region_enabled = true
 region_rect = Rect2(0, 0, 150, 22)
 
-[node name="Platform3" type="StaticBody2D" parent="Solids" unique_id=832259867]
+[node name="Platform3" type="StaticBody2D" parent="Solids" unique_id=453523177]
 position = Vector2(2520, 389)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Solids/Platform3" unique_id=639698900]
+[node name="Shape" type="CollisionShape2D" parent="Solids/Platform3" unique_id=333978336]
 shape = SubResource("RectangleShape2D_jq2sk")
 
-[node name="Visual" type="Sprite2D" parent="Solids/Platform3" unique_id=470675244]
+[node name="Visual" type="Sprite2D" parent="Solids/Platform3" unique_id=1917270876]
 texture = ExtResource("5_yaehf")
 region_enabled = true
 region_rect = Rect2(0, 0, 140, 22)
 
-[node name="Bounds" type="Node2D" parent="." unique_id=708434378]
+[node name="Bounds" type="Node2D" parent="." unique_id=1375165358]
 
-[node name="WallLeft" type="StaticBody2D" parent="Bounds" unique_id=1143714503]
+[node name="WallLeft" type="StaticBody2D" parent="Bounds" unique_id=1945732929]
 position = Vector2(-20, 300)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Bounds/WallLeft" unique_id=579136802]
+[node name="Shape" type="CollisionShape2D" parent="Bounds/WallLeft" unique_id=695826326]
 shape = SubResource("RectangleShape2D_4k2k6")
 
-[node name="WallRight" type="StaticBody2D" parent="Bounds" unique_id=273947158]
+[node name="WallRight" type="StaticBody2D" parent="Bounds" unique_id=585224187]
 position = Vector2(2900, 300)
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Bounds/WallRight" unique_id=633740118]
+[node name="Shape" type="CollisionShape2D" parent="Bounds/WallRight" unique_id=1781655090]
 shape = SubResource("RectangleShape2D_0rl1p")
 
-[node name="Checkpoints" type="Node2D" parent="." unique_id=867268947]
+[node name="Checkpoints" type="Node2D" parent="." unique_id=480909532]
 
-[node name="Checkpoint0" type="Area2D" parent="Checkpoints" unique_id=1683388624]
+[node name="Checkpoint0" type="Area2D" parent="Checkpoints" unique_id=1059803198]
 position = Vector2(140, 409)
 collision_layer = 0
 collision_mask = 2
 script = ExtResource("6_074og")
 
-[node name="Shape" type="CollisionShape2D" parent="Checkpoints/Checkpoint0" unique_id=989704017]
+[node name="Shape" type="CollisionShape2D" parent="Checkpoints/Checkpoint0" unique_id=1142044396]
 shape = SubResource("RectangleShape2D_ok6jj")
 
-[node name="Checkpoint1" type="Area2D" parent="Checkpoints" unique_id=902908952]
+[node name="Checkpoint1" type="Area2D" parent="Checkpoints" unique_id=1566918345]
 position = Vector2(1000, 409)
 collision_layer = 0
 collision_mask = 2
 script = ExtResource("6_074og")
 
-[node name="Shape" type="CollisionShape2D" parent="Checkpoints/Checkpoint1" unique_id=1183743836]
+[node name="Shape" type="CollisionShape2D" parent="Checkpoints/Checkpoint1" unique_id=1396839765]
 shape = SubResource("RectangleShape2D_facbu")
 
-[node name="Checkpoint2" type="Area2D" parent="Checkpoints" unique_id=768501726]
+[node name="Checkpoint2" type="Area2D" parent="Checkpoints" unique_id=1940796412]
 position = Vector2(1960, 409)
 collision_layer = 0
 collision_mask = 2
 script = ExtResource("6_074og")
 
-[node name="Shape" type="CollisionShape2D" parent="Checkpoints/Checkpoint2" unique_id=556589819]
+[node name="Shape" type="CollisionShape2D" parent="Checkpoints/Checkpoint2" unique_id=691924638]
 shape = SubResource("RectangleShape2D_b1qrp")
 
-[node name="Enemies" type="Node2D" parent="." unique_id=682834451]
+[node name="Enemies" type="Node2D" parent="." unique_id=1785308340]
 
-[node name="Enemy0" type="Node2D" parent="Enemies" unique_id=1753599682]
+[node name="Enemy0" type="Node2D" parent="Enemies" unique_id=1410735161]
 position = Vector2(700, 422)
 script = ExtResource("7_cegan")
 
-[node name="Body" type="StaticBody2D" parent="Enemies/Enemy0" unique_id=1122592634]
+[node name="Body" type="StaticBody2D" parent="Enemies/Enemy0" unique_id=804760176]
 collision_layer = 4
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy0/Body" unique_id=2051436625]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy0/Body" unique_id=1771844603]
 shape = SubResource("RectangleShape2D_come4")
 
-[node name="Visual" type="Sprite2D" parent="Enemies/Enemy0/Body" unique_id=1971987739]
+[node name="Visual" type="Sprite2D" parent="Enemies/Enemy0/Body" unique_id=240633877]
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("8_82xsv")
 region_enabled = true
 region_rect = Rect2(0, 0, 24, 24)
 
-[node name="Danger" type="Area2D" parent="Enemies/Enemy0" unique_id=96151231]
+[node name="Danger" type="Area2D" parent="Enemies/Enemy0" unique_id=761960127]
 collision_layer = 0
 collision_mask = 2
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy0/Danger" unique_id=1491844368]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy0/Danger" unique_id=1367752155]
 shape = SubResource("RectangleShape2D_h8e4i")
 
-[node name="Enemy1" type="Node2D" parent="Enemies" unique_id=1207490475]
+[node name="Enemy1" type="Node2D" parent="Enemies" unique_id=1681527110]
 position = Vector2(1700, 422)
 script = ExtResource("7_cegan")
 
-[node name="Body" type="StaticBody2D" parent="Enemies/Enemy1" unique_id=1693800508]
+[node name="Body" type="StaticBody2D" parent="Enemies/Enemy1" unique_id=1500957666]
 collision_layer = 4
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy1/Body" unique_id=1401826080]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy1/Body" unique_id=13674890]
 shape = SubResource("RectangleShape2D_4lmeg")
 
-[node name="Visual" type="Sprite2D" parent="Enemies/Enemy1/Body" unique_id=486252429]
+[node name="Visual" type="Sprite2D" parent="Enemies/Enemy1/Body" unique_id=2102442222]
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("8_82xsv")
 region_enabled = true
 region_rect = Rect2(0, 0, 24, 24)
 
-[node name="Danger" type="Area2D" parent="Enemies/Enemy1" unique_id=295427684]
+[node name="Danger" type="Area2D" parent="Enemies/Enemy1" unique_id=1519701698]
 collision_layer = 0
 collision_mask = 2
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy1/Danger" unique_id=1279332295]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Enemy1/Danger" unique_id=1086495386]
 shape = SubResource("RectangleShape2D_0cp0l")
 
-[node name="Elite0" type="Node2D" parent="Enemies" unique_id=1523698039]
+[node name="Elite0" type="Node2D" parent="Enemies" unique_id=1354562303]
 position = Vector2(450, 422)
 script = ExtResource("9_getpj")
 is_dummy = true
 
-[node name="Body" type="StaticBody2D" parent="Enemies/Elite0" unique_id=734072201]
+[node name="Body" type="StaticBody2D" parent="Enemies/Elite0" unique_id=1684221817]
 collision_layer = 4
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite0/Body" unique_id=1025775980]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite0/Body" unique_id=1145031977]
 shape = SubResource("RectangleShape2D_d2t1y")
 
-[node name="Visual" type="Sprite2D" parent="Enemies/Elite0/Body" unique_id=405142253]
+[node name="Visual" type="Sprite2D" parent="Enemies/Elite0/Body" unique_id=958166243]
 scale = Vector2(2, 2)
 texture = ExtResource("10_ryguw")
 region_rect = Rect2(0, 0, 24, 24)
 
-[node name="AuraIcon" type="Sprite2D" parent="Enemies/Elite0" unique_id=344323100]
+[node name="AuraIcon" type="Sprite2D" parent="Enemies/Elite0" unique_id=1982471998]
 visible = false
 position = Vector2(0, -42)
 
-[node name="ReactionIcon" type="Sprite2D" parent="Enemies/Elite0" unique_id=1228737499]
+[node name="ReactionIcon" type="Sprite2D" parent="Enemies/Elite0" unique_id=264961837]
 visible = false
 position = Vector2(0, -42)
 
-[node name="Danger" type="Area2D" parent="Enemies/Elite0" unique_id=1705376237]
+[node name="Danger" type="Area2D" parent="Enemies/Elite0" unique_id=966168890]
 collision_layer = 0
 collision_mask = 2
 monitoring = false
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite0/Danger" unique_id=276631296]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite0/Danger" unique_id=187258944]
 shape = SubResource("RectangleShape2D_gngh3")
 
-[node name="Elite1" type="Node2D" parent="Enemies" unique_id=1485123993]
+[node name="Elite1" type="Node2D" parent="Enemies" unique_id=243005898]
 position = Vector2(2412, 422)
 script = ExtResource("9_getpj")
 
-[node name="Body" type="StaticBody2D" parent="Enemies/Elite1" unique_id=768146659]
+[node name="Body" type="StaticBody2D" parent="Enemies/Elite1" unique_id=1406961788]
 collision_layer = 4
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite1/Body" unique_id=1719952]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite1/Body" unique_id=599094862]
 shape = SubResource("RectangleShape2D_0n3wm")
 
-[node name="Visual" type="Sprite2D" parent="Enemies/Elite1/Body" unique_id=1220939309]
+[node name="Visual" type="Sprite2D" parent="Enemies/Elite1/Body" unique_id=390133746]
 scale = Vector2(2, 2)
 texture = ExtResource("8_82xsv")
 region_enabled = true
 region_rect = Rect2(0, 0, 24, 24)
 
-[node name="AuraIcon" type="Sprite2D" parent="Enemies/Elite1" unique_id=52620797]
+[node name="AuraIcon" type="Sprite2D" parent="Enemies/Elite1" unique_id=236613247]
 visible = false
 position = Vector2(0, -42)
 
-[node name="ReactionIcon" type="Sprite2D" parent="Enemies/Elite1" unique_id=2087277082]
+[node name="ReactionIcon" type="Sprite2D" parent="Enemies/Elite1" unique_id=1801632114]
 visible = false
 position = Vector2(0, -42)
 
-[node name="Danger" type="Area2D" parent="Enemies/Elite1" unique_id=507330579]
+[node name="Danger" type="Area2D" parent="Enemies/Elite1" unique_id=1993207132]
 collision_layer = 0
 collision_mask = 2
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite1/Danger" unique_id=522520549]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Elite1/Danger" unique_id=484276513]
 shape = SubResource("RectangleShape2D_qnost")
 
-[node name="Patrol0" type="CharacterBody2D" parent="Enemies" unique_id=1381287090]
+[node name="Patrol0" type="CharacterBody2D" parent="Enemies" unique_id=564111387]
 position = Vector2(1500, 422)
 collision_layer = 4
 script = ExtResource("11_d13ii")
 patrol_left = -110.0
 patrol_right = 110.0
 
-[node name="LedgeProbe" type="RayCast2D" parent="Enemies/Patrol0" unique_id=1268934322]
+[node name="LedgeProbe" type="RayCast2D" parent="Enemies/Patrol0" unique_id=1750135632]
 position = Vector2(15, 15)
 target_position = Vector2(0, 14)
 
-[node name="Sight" type="RayCast2D" parent="Enemies/Patrol0" unique_id=1961361327]
+[node name="Sight" type="RayCast2D" parent="Enemies/Patrol0" unique_id=1714672023]
 position = Vector2(0, -4.25)
 collision_mask = 3
 
-[node name="Danger" type="Area2D" parent="Enemies/Patrol0" unique_id=8157794]
+[node name="Danger" type="Area2D" parent="Enemies/Patrol0" unique_id=563433093]
 collision_layer = 0
 collision_mask = 2
 
-[node name="Shape" type="CollisionShape2D" parent="Enemies/Patrol0/Danger" unique_id=1391570747]
+[node name="Shape" type="CollisionShape2D" parent="Enemies/Patrol0/Danger" unique_id=1529497221]
 shape = SubResource("RectangleShape2D_wnkbs")
 
-[node name="Visual" type="Sprite2D" parent="Enemies/Patrol0" unique_id=419150320]
+[node name="Visual" type="Sprite2D" parent="Enemies/Patrol0" unique_id=2045643206]
 scale = Vector2(1.5, 1.5)
 texture = ExtResource("8_82xsv")
 region_enabled = true
 region_rect = Rect2(0, 0, 24, 24)
 
-[node name="Hazards" type="Node2D" parent="." unique_id=431269425]
+[node name="Hazards" type="Node2D" parent="." unique_id=1128667340]
 
-[node name="Hazard0" type="Area2D" parent="Hazards" unique_id=1064893837]
+[node name="Hazard0" type="Area2D" parent="Hazards" unique_id=640475598]
 position = Vector2(2280, 389)
 collision_layer = 0
 collision_mask = 2
 script = ExtResource("12_1u8w0")
 travel = 190.0
 
-[node name="Visual" type="Sprite2D" parent="Hazards/Hazard0" unique_id=1340085136]
+[node name="Visual" type="Sprite2D" parent="Hazards/Hazard0" unique_id=396839564]
 texture = ExtResource("13_0odxb")
 
-[node name="Shape" type="CollisionShape2D" parent="Hazards/Hazard0" unique_id=1747896591]
+[node name="Shape" type="CollisionShape2D" parent="Hazards/Hazard0" unique_id=827292879]
 shape = SubResource("RectangleShape2D_f6a44")
 
-[node name="Hazard1" type="Area2D" parent="Hazards" unique_id=767053620]
+[node name="Hazard1" type="Area2D" parent="Hazards" unique_id=983981976]
 position = Vector2(2620, 379)
 collision_layer = 0
 collision_mask = 2
@@ -429,36 +428,36 @@ travel = 110.0
 vertical = true
 start_progress = 0.5
 
-[node name="Visual" type="Sprite2D" parent="Hazards/Hazard1" unique_id=174125955]
+[node name="Visual" type="Sprite2D" parent="Hazards/Hazard1" unique_id=1866296321]
 texture = ExtResource("13_0odxb")
 
-[node name="Shape" type="CollisionShape2D" parent="Hazards/Hazard1" unique_id=367913617]
+[node name="Shape" type="CollisionShape2D" parent="Hazards/Hazard1" unique_id=1290836951]
 shape = SubResource("RectangleShape2D_0cbny")
 
-[node name="HUD" type="CanvasLayer" parent="." unique_id=208873456]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=138312458]
 
-[node name="Info" type="Label" parent="HUD" unique_id=686782487]
+[node name="Info" type="Label" parent="HUD" unique_id=1282260056]
 offset_left = 16.0
 offset_top = 10.0
 offset_right = 760.0
 offset_bottom = 62.0
 theme_override_font_sizes/font_size = 18
 
-[node name="HpBar" type="Label" parent="HUD" unique_id=1576343858]
+[node name="HpBar" type="Label" parent="HUD" unique_id=1377752970]
 offset_left = 16.0
 offset_top = 70.0
 offset_right = 760.0
 offset_bottom = 100.0
 theme_override_font_sizes/font_size = 16
 
-[node name="SlowBar" type="Label" parent="HUD" unique_id=171684228]
+[node name="SlowBar" type="Label" parent="HUD" unique_id=1590874828]
 offset_left = 16.0
 offset_top = 106.0
 offset_right = 760.0
 offset_bottom = 136.0
 theme_override_font_sizes/font_size = 16
 
-[node name="HelpText" type="Label" parent="HUD" unique_id=1501013296]
+[node name="HelpText" type="Label" parent="HUD" unique_id=1857404517]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -468,7 +467,7 @@ offset_right = 944.0
 offset_bottom = -8.0
 theme_override_font_sizes/font_size = 13
 
-[node name="ElemFrame" type="Panel" parent="HUD" unique_id=172448954]
+[node name="ElemFrame" type="Panel" parent="HUD" unique_id=419394016]
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -478,7 +477,7 @@ offset_right = -16.0
 offset_bottom = 84.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_hrvbo")
 
-[node name="ElemIcon" type="TextureRect" parent="HUD" unique_id=499475516]
+[node name="ElemIcon" type="TextureRect" parent="HUD" unique_id=1949350378]
 texture_filter = 1
 anchors_preset = 1
 anchor_left = 1.0
